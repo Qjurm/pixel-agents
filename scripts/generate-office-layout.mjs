@@ -64,8 +64,8 @@ function place(type, col, row) {
 // Two zones so the room reads as a workspace and a lounge rather than one hall.
 // The colours are the floor tiles' HSBC controls, not literal RGB: warm wood
 // for the desks, a cooler tone for the lounge.
-const WOOD = { h: 28, s: 34, b: -12, c: -30 };
-const LOUNGE = { h: 168, s: 22, b: -18, c: -34 };
+const WOOD = { h: 30, s: 16, b: -6, c: -48 };
+const LOUNGE = { h: 172, s: 14, b: -10, c: -46 };
 
 fill(1, 2, COLS - 2, 23, TILE.FLOOR_7, WOOD);
 fill(1, 24, COLS - 2, ROWS - 2, TILE.FLOOR_1, LOUNGE);
@@ -80,9 +80,10 @@ for (let r = 1; r <= ROWS - 1; r++) {
   setTile(1, r, TILE.WALL);
   setTile(COLS - 2, r, TILE.WALL);
 }
-// A low divider between the two zones, left open at both ends so nobody has to
-// path all the way around to reach the coffee.
-for (let c = 6; c <= COLS - 7; c++) setTile(c, 24, TILE.WALL);
+// No divider between the two zones. A wall here rendered as a long pale bar
+// straight across the room -- it read as a reception counter, not as a
+// partition -- and an open plan is what the place actually is. The floor change
+// is enough to say "this part is the lounge".
 
 // ── Desk pods ────────────────────────────────────────────────
 // WHITE_DESK_MACBOOK is category "desks", so characters treat it as a
