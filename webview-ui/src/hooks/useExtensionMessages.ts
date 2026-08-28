@@ -361,7 +361,19 @@ export function useExtensionMessages(
         const permissionActive = msg.permissionActive as boolean | undefined;
         setAgentTools((prev) => {
           const list = prev[id] || [];
-          if (list.some((t) => t.toolId === toolId)) return prev;
+          const existing = list.find((t) => t.toolId === toolId);
+          if (existing) {
+            // A repeat used to be dropped outright, which was right when the
+            // status could never change for a given tool. The office now
+            // re-labels a running tool every few seconds (activityMask), so a
+            // repeat is a REFRESH: update the text in place and keep the
+            // entry's position, its done flag and its permission state.
+            if (existing.status === status) return prev;
+            return {
+              ...prev,
+              [id]: list.map((t) => (t.toolId === toolId ? { ...t, status } : t)),
+            };
+          }
           return {
             ...prev,
             [id]: [

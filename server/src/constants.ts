@@ -157,6 +157,10 @@ export const LEADERBOARD_FILE_NAME = 'leaderboard.json';
  *  nothing anyone will notice. */
 export const LEADERBOARD_SAVE_INTERVAL_MS = 30_000;
 export const TURN_ID_FIELD = '__pixelAgentsTurnId';
+/** How often a busy agent's nonsense label is swapped for another. Short
+ *  enough that the room reads as alive, long enough to actually finish reading
+ *  the words. */
+export const PHRASE_ROTATE_INTERVAL_MS = 5_000;
 /** Marker on a broadcast naming the connection that caused it, so that
  *  connection can skip its own echo. Stripped before the message is sent, so
  *  it never reaches a client and needs no place in the AsyncAPI contract. */

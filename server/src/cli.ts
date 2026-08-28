@@ -538,6 +538,7 @@ async function main(): Promise<void> {
     // Outside the project-dir guard on purpose: teammates report work that
     // lives on their own disk, so no local folder gates their presence.
     runtime.startRemotePresenceCheck();
+    runtime.startPhraseTicker();
 
     // Two different addresses, and confusing them is the whole reason this
     // block is shaped the way it is.

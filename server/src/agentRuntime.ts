@@ -39,6 +39,7 @@ import type { HookEvent } from './hookEventHandler.js';
 import { HookEventHandler } from './hookEventHandler.js';
 import { assignPaletteIfNeeded } from './paletteAssigner.js';
 import { PathSet, pathsMatch } from './pathKey.js';
+import { startPhraseTicker } from './phraseTicker.js';
 import { SessionRouter } from './sessionRouter.js';
 import { SubagentWatch } from './subagentWatch.js';
 import { cancelPermissionTimer, cancelWaitingTimer } from './timerManager.js';
@@ -75,6 +76,7 @@ export class AgentRuntime {
   private externalScanTimer: ReturnType<typeof setInterval> | null = null;
   private staleCheckTimer: ReturnType<typeof setInterval> | null = null;
   private remotePresenceTimer: ReturnType<typeof setInterval> | null = null;
+  private phraseTimer: ReturnType<typeof setInterval> | null = null;
 
   // Configuration refs (mutable, shared with scanners)
   readonly watchAllSessions = { current: false };
@@ -447,6 +449,13 @@ export class AgentRuntime {
     );
   }
 
+  /** Start rotating the nonsense labels of agents that are busy. Independent
+   *  of any scanner: it re-labels whatever the store already says is running. */
+  startPhraseTicker(): void {
+    if (this.phraseTimer) return;
+    this.phraseTimer = startPhraseTicker(this.store);
+  }
+
   /** Start the teammate presence sweep (despawns remote agents gone quiet).
    *  Independent of any project directory: a teammate's work lives on their
    *  disk, so there is no local folder whose presence could gate this. */
@@ -593,6 +602,10 @@ export class AgentRuntime {
     if (this.remotePresenceTimer) {
       clearInterval(this.remotePresenceTimer);
       this.remotePresenceTimer = null;
+    }
+    if (this.phraseTimer) {
+      clearInterval(this.phraseTimer);
+      this.phraseTimer = null;
     }
 
     for (const id of [...this.store.keys()]) {
