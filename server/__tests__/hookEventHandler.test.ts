@@ -729,6 +729,45 @@ describe('HookEventHandler', () => {
     );
   });
 
+  it('adopts a teammate from any event, not just SessionStart', () => {
+    // Their SessionStart happened on their machine, possibly before this office
+    // existed. Dropping the event would mean they never appear at all -- and it
+    // is also how a teammate the presence sweep evicted comes back.
+    const onExternalSessionDetected = vi.fn();
+    handler.setLifecycleCallbacks({ onExternalSessionDetected });
+
+    handler.handleEvent('claude', {
+      hook_event_name: 'PreToolUse',
+      session_id: 'mid-flight-sess',
+      tool_name: 'Edit',
+      cwd: '/Users/sanne/work/api',
+      __pixelAgentsTeamUser: 'sanne',
+    });
+
+    expect(onExternalSessionDetected).toHaveBeenCalledWith(
+      'mid-flight-sess',
+      undefined,
+      '/Users/sanne/work/api',
+      'sanne',
+    );
+  });
+
+  it('drops an unlabelled event for an unknown session, as before', () => {
+    // The re-adoption path must not become a way for any stray local session
+    // to bypass the tracked-project gate.
+    const onExternalSessionDetected = vi.fn();
+    handler.setLifecycleCallbacks({ onExternalSessionDetected });
+
+    handler.handleEvent('claude', {
+      hook_event_name: 'PreToolUse',
+      session_id: 'stray-sess',
+      tool_name: 'Edit',
+      cwd: '/projects/test',
+    });
+
+    expect(onExternalSessionDetected).not.toHaveBeenCalled();
+  });
+
   it('treats an unlabelled event as local even when it looks foreign', () => {
     // The label is the ONLY signal. Without it the event came in over loopback
     // from this machine's own Claude, whatever its paths look like.

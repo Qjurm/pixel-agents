@@ -311,6 +311,34 @@ export class HookEventHandler {
         }
       }
     }
+    if (agentId === undefined && remoteUser) {
+      // A labelled event for a session we don't know. Adopt it on the spot
+      // rather than dropping it, because for a teammate there is no later
+      // chance: SessionStart already happened on their machine, and every
+      // remaining event kind would fall straight through this branch.
+      //
+      // Three real situations land here, and adopting fixes all of them: the
+      // office started after they did; the office restarted under them; and a
+      // live session that the presence sweep evicted for being quiet.
+      //
+      // cwd is read off the raw event -- the normalized AgentEvent only carries
+      // it for sessionStart, and this is exactly the provider-specific
+      // adoption metadata that raw reads are permitted for.
+      const cwd = typeof event.cwd === 'string' ? event.cwd : '';
+      if (debug)
+        console.log(
+          `[Pixel Agents] Hook: re-adopting ${remoteUser}'s session ${event.session_id.slice(0, 8)}... from ${eventName}`,
+        );
+      this.lifecycleCallbacks.onExternalSessionDetected?.(
+        event.session_id,
+        undefined,
+        cwd,
+        remoteUser,
+      );
+      const adoptedId = this.sessionRouter.resolve(event.session_id);
+      if (adoptedId === undefined) return; // adoption declined; nothing to route to
+      agentId = adoptedId;
+    }
     if (agentId === undefined) {
       // Buffer if: pending external session, already buffering for this session,
       // OR agents exist that haven't been registered yet (internal agent race:
@@ -336,6 +364,9 @@ export class HookEventHandler {
     if (!agent) return;
 
     agent.hookDelivered = true;
+    // Presence clock for teammates. Safe to reuse lastDataAt: it is otherwise
+    // written by the transcript reader, and a remote agent has no transcript.
+    if (agent.remoteUser) agent.lastDataAt = Date.now();
     if (debug)
       console.log(
         `[Pixel Agents] Hook: Agent ${agentId} - ${eventName} (session=${event.session_id.slice(0, 8)}...)`,

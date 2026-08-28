@@ -41,6 +41,8 @@ import {
   GLOBAL_SCAN_ACTIVE_MAX_AGE_MS,
   GLOBAL_SCAN_ACTIVE_MIN_SIZE,
   PROJECT_SCAN_INTERVAL_MS,
+  REMOTE_PRESENCE_CHECK_INTERVAL_MS,
+  REMOTE_PRESENCE_TIMEOUT_MS,
 } from './constants.js';
 import { seedContextUsage } from './contextUsage.js';
 import type { DismissalTracker } from './dismissalTracker.js';
@@ -1615,6 +1617,43 @@ export function startStaleExternalAgentCheck(
       agentRemovalCallback?.(id);
     }
   }, EXTERNAL_STALE_CHECK_INTERVAL_MS);
+}
+
+/**
+ * Despawn teammates whose machine stopped reporting.
+ *
+ * A local agent's liveness can be read off its transcript file; a teammate's
+ * cannot, and nothing on their machine can beat on its own, so silence is the
+ * only signal available. Clean exits still despawn instantly via SessionEnd --
+ * this catches only the cases that send nothing: a closed lid, a dropped
+ * network, a killed process.
+ *
+ * Unlike the stale-transcript check this runs even while hooks are enabled,
+ * because hooks are precisely what has gone quiet.
+ */
+export function startRemotePresenceCheck(
+  agents: AgentStateStore,
+  timeoutMs: number = REMOTE_PRESENCE_TIMEOUT_MS,
+  intervalMs: number = REMOTE_PRESENCE_CHECK_INTERVAL_MS,
+): ReturnType<typeof setInterval> {
+  return setInterval(() => {
+    const now = Date.now();
+    const toRemove: number[] = [];
+
+    for (const [id, agent] of agents) {
+      if (!agent.remoteUser) continue;
+      if (now - agent.lastDataAt < timeoutMs) continue;
+      toRemove.push(id);
+    }
+
+    for (const id of toRemove) {
+      const agent = agents.get(id);
+      console.log(
+        `[Pixel Agents] Presence: Agent ${id} - ${agent?.remoteUser ?? 'teammate'} stopped reporting, despawning`,
+      );
+      agentRemovalCallback?.(id);
+    }
+  }, intervalMs);
 }
 
 export function reassignAgentToFile(

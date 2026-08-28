@@ -4,8 +4,16 @@ import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentStateStore } from '../src/agentStateStore.js';
-import { EXTERNAL_STALE_CHECK_INTERVAL_MS } from '../src/constants.js';
-import { setAgentRemovalCallback, startStaleExternalAgentCheck } from '../src/fileWatcher.js';
+import {
+  EXTERNAL_STALE_CHECK_INTERVAL_MS,
+  REMOTE_PRESENCE_CHECK_INTERVAL_MS,
+  REMOTE_PRESENCE_TIMEOUT_MS,
+} from '../src/constants.js';
+import {
+  setAgentRemovalCallback,
+  startRemotePresenceCheck,
+  startStaleExternalAgentCheck,
+} from '../src/fileWatcher.js';
 import type { AgentState } from '../src/types.js';
 
 let tmpDir: string;
@@ -103,6 +111,72 @@ describe('startStaleExternalAgentCheck', () => {
     store.set(1, makeAgent({ id: 1, jsonlFile: path.join(tmpDir, 'deleted.jsonl') }));
     timer = startStaleExternalAgentCheck(store, new Set(), { current: true });
     vi.advanceTimersByTime(EXTERNAL_STALE_CHECK_INTERVAL_MS);
+    expect(removed).toEqual([]);
+  });
+});
+
+/**
+ * Teammates have no transcript to judge and no process on their machine that
+ * could beat, so silence is the only liveness signal the office ever gets.
+ */
+describe('startRemotePresenceCheck', () => {
+  function sweep(store: AgentStateStore): void {
+    timer = startRemotePresenceCheck(store);
+    vi.advanceTimersByTime(REMOTE_PRESENCE_CHECK_INTERVAL_MS);
+  }
+
+  it('despawns a teammate who has gone silent past the timeout', () => {
+    const store = new AgentStateStore();
+    store.set(
+      1,
+      makeAgent({
+        id: 1,
+        remoteUser: 'sanne',
+        hooksOnly: true,
+        lastDataAt: Date.now() - REMOTE_PRESENCE_TIMEOUT_MS - 1,
+      }),
+    );
+    sweep(store);
+    expect(removed).toEqual([1]);
+  });
+
+  it('leaves a teammate alone while they are still reporting', () => {
+    const store = new AgentStateStore();
+    store.set(
+      1,
+      makeAgent({ id: 1, remoteUser: 'sanne', hooksOnly: true, lastDataAt: Date.now() }),
+    );
+    sweep(store);
+    expect(removed).toEqual([]);
+  });
+
+  it('leaves a teammate alone right up to the timeout', () => {
+    // An off-by-one here evicts people a whole sweep early, so the boundary is
+    // worth pinning rather than assuming. Note the sweep fires one interval
+    // from now and the fake clock moves with it, so the agent must start that
+    // much further inside the window to still be inside it when judged.
+    const store = new AgentStateStore();
+    const ageAtSweep = REMOTE_PRESENCE_TIMEOUT_MS - 1_000;
+    store.set(
+      1,
+      makeAgent({
+        id: 1,
+        remoteUser: 'sanne',
+        hooksOnly: true,
+        lastDataAt: Date.now() - (ageAtSweep - REMOTE_PRESENCE_CHECK_INTERVAL_MS),
+      }),
+    );
+    sweep(store);
+    expect(removed).toEqual([]);
+  });
+
+  it('never touches local agents, however long they have been quiet', () => {
+    // A local agent that is merely idle is still visibly present at their desk;
+    // only the stale-transcript rule may remove one.
+    const store = new AgentStateStore();
+    store.set(1, makeAgent({ id: 1, jsonlFile: '/tmp/local.jsonl', lastDataAt: 0 }));
+    store.set(2, makeAgent({ id: 2, hooksOnly: true, lastDataAt: 0 }));
+    sweep(store);
     expect(removed).toEqual([]);
   });
 });

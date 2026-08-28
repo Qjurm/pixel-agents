@@ -412,6 +412,10 @@ async function main(): Promise<void> {
       runtime.startStaleCheck();
     }
 
+    // Outside the project-dir guard on purpose: teammates report work that
+    // lives on their own disk, so no local folder gates their presence.
+    runtime.startRemotePresenceCheck();
+
     // The URL the operator opens has to be REACHABLE (a wildcard bind address
     // is a bind target, not an address you can browse to — `--host 0.0.0.0`
     // used to print a dead `http://0.0.0.0:PORT`) and has to carry the token,

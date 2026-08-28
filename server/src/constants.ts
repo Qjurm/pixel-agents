@@ -130,6 +130,22 @@ export const TEAM_USER_LABEL_MAX = 32;
  *  without widening the onHookEvent signature through both surfaces. The name
  *  is namespaced because it shares a namespace with Claude's own hook keys. */
 export const TEAM_EVENT_USER_FIELD = '__pixelAgentsTeamUser';
+// ── Remote agent presence ───────────────────────────────────
+/** How long a teammate's agent may go completely silent before the office
+ *  assumes their machine is gone and despawns the character.
+ *
+ *  This is a timeout, NOT a heartbeat: the hook script runs only when Claude
+ *  fires an event, so a teammate's machine has no resident process that could
+ *  beat on its own. A clean exit sends SessionEnd and despawns immediately;
+ *  this rule is what catches the laptop lid closing, the VPN dropping, and the
+ *  process being killed -- none of which send anything at all.
+ *
+ *  Long enough that reading output or writing a prompt doesn't evict anyone,
+ *  and eviction is cheap anyway: the next event from a live session re-adopts
+ *  it (see hookEventHandler's unknown-session branch). */
+export const REMOTE_PRESENCE_TIMEOUT_MS = 900_000; // 15 minutes
+/** How often to sweep for teammates who stopped reporting. */
+export const REMOTE_PRESENCE_CHECK_INTERVAL_MS = 60_000; // 1 minute
 /** POST timeout for a team server. Longer than the 2s loopback budget because
  *  the hop is a real network, short enough that an unreachable office never
  *  becomes a visible stall in the agent it is reporting on. */

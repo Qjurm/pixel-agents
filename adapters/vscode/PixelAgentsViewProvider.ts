@@ -736,6 +736,9 @@ export class PixelAgentsViewProvider implements vscode.WebviewViewProvider {
         }
 
         this.runtime.startStaleCheck();
+        // Teammates' work lives on their machines, so this one is not tied to
+        // any workspace folder.
+        this.runtime.startRemotePresenceCheck();
 
         // Load furniture assets BEFORE sending layout
         (async () => {

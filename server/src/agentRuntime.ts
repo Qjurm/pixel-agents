@@ -32,6 +32,7 @@ import {
   setTeamProvider,
   startExternalSessionScanning,
   startFileWatching,
+  startRemotePresenceCheck,
   startStaleExternalAgentCheck,
 } from './fileWatcher.js';
 import type { HookEvent } from './hookEventHandler.js';
@@ -73,6 +74,7 @@ export class AgentRuntime {
   readonly activeAgentId = { current: null as number | null };
   private externalScanTimer: ReturnType<typeof setInterval> | null = null;
   private staleCheckTimer: ReturnType<typeof setInterval> | null = null;
+  private remotePresenceTimer: ReturnType<typeof setInterval> | null = null;
 
   // Configuration refs (mutable, shared with scanners)
   readonly watchAllSessions = { current: false };
@@ -445,6 +447,14 @@ export class AgentRuntime {
     );
   }
 
+  /** Start the teammate presence sweep (despawns remote agents gone quiet).
+   *  Independent of any project directory: a teammate's work lives on their
+   *  disk, so there is no local folder whose presence could gate this. */
+  startRemotePresenceCheck(): void {
+    if (this.remotePresenceTimer) return;
+    this.remotePresenceTimer = startRemotePresenceCheck(this.store);
+  }
+
   /** Start stale external agent check (removes agents whose JSONL files are deleted). */
   startStaleCheck(): void {
     if (this.staleCheckTimer) return;
@@ -579,6 +589,10 @@ export class AgentRuntime {
     if (this.staleCheckTimer) {
       clearInterval(this.staleCheckTimer);
       this.staleCheckTimer = null;
+    }
+    if (this.remotePresenceTimer) {
+      clearInterval(this.remotePresenceTimer);
+      this.remotePresenceTimer = null;
     }
 
     for (const id of [...this.store.keys()]) {
