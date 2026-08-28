@@ -205,7 +205,11 @@ describe('dist/cli.js entry-point guard', () => {
    *  would be testing the helper. The trailing `\s` makes it wait for a
    *  complete line: stdout arrives in chunks, and a half-delivered URL still
    *  parses as a URL (`http://127.0.0.1:501`). */
-  const URL_LINE = /Pixel Agents server running at (\S+)\s/;
+  // Matched by SHAPE, not by the sentence around it. The prose has been
+  // reworded once already and pinning it made this test fail for a wording
+  // change while the thing it actually guards -- that the printed URL carries
+  // the real token and is browsable -- was still correct.
+  const URL_LINE = /(http:\/\/\S+\/\?token=\S+)/;
 
   function printedUrl(output: string): URL {
     const match = URL_LINE.exec(output);
@@ -261,6 +265,26 @@ describe('dist/cli.js entry-point guard', () => {
         // The wildcard bind must not cost the operator the token either.
         expect(url.searchParams.get('token')).toBe(mintedToken(tmpHome));
         expect((await fetch(url)).status).toBe(200);
+
+        // The other half, and the half that actually went wrong in use: the
+        // operator bound to the network in order to tell colleagues where the
+        // office is, so a SHAREABLE address has to be findable in this output.
+        // Loopback is what they get for themselves; it is useless to send on.
+        //
+        // A runner with no external interface is a real case, so the contract
+        // is "either a non-loopback link, or say you could not work one out" --
+        // never silence, which is what the operator hit.
+        const text = output();
+        const shared = /Share this with your colleagues:\s*\n\s*\n?\s*(http:\/\/\S+)/.exec(text);
+        if (shared?.[1]) {
+          const shareUrl = new URL(shared[1]);
+          expect(['127.0.0.1', 'localhost', '0.0.0.0']).not.toContain(shareUrl.hostname);
+          // Nothing that can approve a hook install may ride along on the
+          // address handed to other people.
+          expect(shareUrl.searchParams.get('token')).toBeNull();
+        } else {
+          expect(text).toContain('ipconfig getifaddr');
+        }
       },
       '0.0.0.0',
     );
