@@ -12,7 +12,7 @@ import {
   setHooksEnabled,
   writeConfig,
 } from './configPersistence.js';
-import { HUE_SHIFT_MAX_DEG, PALETTE_COUNT } from './constants.js';
+import { BROADCAST_ORIGIN_FIELD, HUE_SHIFT_MAX_DEG, PALETTE_COUNT } from './constants.js';
 import { hostLabel } from './hostLabel.js';
 import { readLayoutFromFile, writeLayoutToFile } from './layoutPersistence.js';
 import type { ConsentEffects } from './providers/hook/consentExecutor.js';
@@ -48,6 +48,11 @@ export interface AssetCache {
 
 export interface ClientMessageContext {
   store: AgentStateStore;
+  /** Identifies this connection among the office's viewers, so a change it
+   *  makes can be broadcast to everyone EXCEPT itself. Absent for surfaces
+   *  with a single client (the VS Code webview), where there is no echo to
+   *  avoid. */
+  connectionId?: string;
   runtime?: AgentRuntime;
   cache: AssetCache | null;
   /** Install/uninstall hooks side effect. Needs server url+token known only to cli.ts. */
@@ -115,6 +120,16 @@ export function handleClientMessage(
     case 'saveLayout':
       if (msg.layout) {
         writeLayoutToFile(msg.layout as Record<string, unknown>);
+        // One office, one layout: everyone watching should see the change now,
+        // not the next time they reload. The editor that made it is excluded --
+        // it already has this state, and re-applying would reset its view. The
+        // receiving side skips the update if its own editor has unsaved work
+        // (useExtensionMessages.ts), so this cannot stomp somebody mid-edit.
+        ctx.store.broadcast({
+          type: 'layoutLoaded',
+          layout: msg.layout,
+          [BROADCAST_ORIGIN_FIELD]: ctx.connectionId,
+        });
       }
       break;
 

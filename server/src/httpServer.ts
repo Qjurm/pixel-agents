@@ -17,6 +17,7 @@ import type {
 } from './clientMessageHandler.js';
 import { handleClientMessage } from './clientMessageHandler.js';
 import {
+  BROADCAST_ORIGIN_FIELD,
   HOOK_API_PREFIX,
   MAX_HOOK_BODY_SIZE,
   TEAM_EVENT_USER_FIELD,
@@ -291,7 +292,20 @@ function registerWebSocketRoute(app: FastifyInstance, options: HttpServerOptions
       safeSend(socket, { type: 'agentClosed', id });
     };
 
+    // Identifies this socket for the duration of the connection, so a change
+    // it made comes back to everyone else and not to itself.
+    const connectionId = crypto.randomUUID();
+
     const onBroadcast = (message: Record<string, unknown>) => {
+      const origin = message[BROADCAST_ORIGIN_FIELD];
+      if (typeof origin === 'string') {
+        if (origin === connectionId) return; // our own echo
+        // The marker is server-side bookkeeping; the wire contract knows
+        // nothing about it, so it never leaves this function.
+        const { [BROADCAST_ORIGIN_FIELD]: _origin, ...rest } = message;
+        safeSend(socket, rest);
+        return;
+      }
       safeSend(socket, message);
     };
 
@@ -313,6 +327,7 @@ function registerWebSocketRoute(app: FastifyInstance, options: HttpServerOptions
           onSetHooksEnabled: options.onSetHooksEnabled,
           onReloadAssets: options.onReloadAssets,
           privileged,
+          connectionId,
         });
       } catch {
         // Malformed JSON, ignore

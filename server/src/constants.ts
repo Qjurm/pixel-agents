@@ -146,6 +146,10 @@ export const TEAM_EVENT_USER_FIELD = '__pixelAgentsTeamUser';
 export const REMOTE_PRESENCE_TIMEOUT_MS = 900_000; // 15 minutes
 /** How often to sweep for teammates who stopped reporting. */
 export const REMOTE_PRESENCE_CHECK_INTERVAL_MS = 60_000; // 1 minute
+/** Marker on a broadcast naming the connection that caused it, so that
+ *  connection can skip its own echo. Stripped before the message is sent, so
+ *  it never reaches a client and needs no place in the AsyncAPI contract. */
+export const BROADCAST_ORIGIN_FIELD = '__originConnectionId';
 /** POST timeout for a team server. Longer than the 2s loopback budget because
  *  the hop is a real network, short enough that an unreachable office never
  *  becomes a visible stall in the agent it is reporting on. */
