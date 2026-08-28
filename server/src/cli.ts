@@ -539,43 +539,50 @@ async function main(): Promise<void> {
     // lives on their own disk, so no local folder gates their presence.
     runtime.startRemotePresenceCheck();
 
-    // The URL the operator opens has to be REACHABLE (a wildcard bind address
-    // is a bind target, not an address you can browse to — `--host 0.0.0.0`
-    // used to print a dead `http://0.0.0.0:PORT`) and has to carry the token,
-    // which is what makes the session it loads privileged enough to approve a
-    // hook install (see standaloneTokenValid in httpServer.ts). Under `--host
-    // 0.0.0.0` the office stays readable from the LAN at this machine's own
-    // address; only the consent-bearing toggle needs the token.
-    const displayHost =
-      args.host === '0.0.0.0' || args.host === '::' || args.host === '' ? '127.0.0.1' : args.host;
+    // Two different addresses, and confusing them is the whole reason this
+    // block is shaped the way it is.
+    //
+    // A wildcard bind is a bind TARGET, not somewhere you can browse to, so the
+    // operator's own URL falls back to loopback. But the operator is also the
+    // person who has to tell colleagues where the office is, and that is the
+    // LAN address -- which used to be buried below the loopback line everyone
+    // reads first.
+    const isSharedBind = args.host === '0.0.0.0' || args.host === '::';
+    const displayHost = isSharedBind || args.host === '' ? '127.0.0.1' : args.host;
+    const lanHost = firstNonLoopbackAddress();
+
+    // A reused server was bound by whichever process started it, which may
+    // well have been loopback-only -- so --host here bought nothing and the
+    // share link would be a dead end.
+    const reused = !server.ownsItsServer();
+    if (reused && isSharedBind) {
+      console.log(
+        `\n  NOTE: reusing a server that was already running, so --host ${args.host} had no\n` +
+          '  effect. If colleagues cannot reach it, stop that server and start this one\n' +
+          '  again.\n',
+      );
+    }
+
+    if (isSharedBind && lanHost && !reused) {
+      console.log(
+        '\n  Share this with your colleagues:\n' +
+          `\n      http://${lanHost}:${config.port}\n` +
+          '\n  That is all they need. The page has a Join button that hands them the' +
+          '\n  one line to paste — no clone, no npm, no build.\n',
+      );
+    }
+
+    // The operator's own URL carries the token, which is what makes the session
+    // it loads privileged enough to approve a hook install (standaloneTokenValid
+    // in httpServer.ts). It is deliberately printed SECOND and labelled, because
+    // it is the one address that must not be shared.
     console.log(
-      `\n  Pixel Agents server running at http://${displayHost}:${config.port}/?token=${config.token}\n`,
+      '  Your own control panel — keep this one to yourself, the token in it can' +
+        "\n  change this machine's Claude settings:\n" +
+        `\n      http://${displayHost}:${config.port}/?token=${config.token}\n`,
     );
 
-    // A wildcard bind is the only reason to host a shared office, so that is
-    // when the join instructions are worth printing -- and the ONLY token that
-    // appears here is the team one. Handing colleagues the URL above instead
-    // would hand them the power to rewrite this machine's ~/.claude/settings.json.
-    const isSharedBind = args.host === '0.0.0.0' || args.host === '::';
-    const teamToken = server.getTeamHostToken();
-    if (isSharedBind && teamToken) {
-      const lanHost = firstNonLoopbackAddress() ?? displayHost;
-      console.log('  Shared office — colleagues join from their own machine with:\n');
-      // Deliberately NOT `npx pixel-agents`: that resolves to the published
-      // package, and a colleague whose copy predates team support would run a
-      // build with no --join at all. Whatever they launch this server with is
-      // by definition a copy that has it.
-      console.log(
-        `    pixel-agents --join http://${lanHost}:${config.port} --token ${teamToken} --as <name>\n`,
-      );
-      console.log(
-        '  Run that with the same pixel-agents build you started this server with —\n' +
-          '  a copy without team support has no --join.\n',
-      );
-      console.log(
-        '  That token only accepts agent events. Keep the URL above (with ?token=) to\n' +
-          "  yourself: it is the one that can change this machine's Claude settings.\n",
-      );
+    if (isSharedBind) {
       // The trap this catches: teammates bypass the tracked-project gate, so a
       // host who works outside the folder they launched from sees EVERYONE
       // except themselves -- and reads that as the feature being broken.
@@ -585,6 +592,12 @@ async function main(): Promise<void> {
             `  ${process.cwd()}\n` +
             '  Turn on Settings -> Watch All Sessions to see your other projects too\n' +
             '  (that also shows them to everyone watching this office).\n',
+        );
+      }
+      if (!lanHost) {
+        console.log(
+          "  Could not work out this machine's network address, so there is no link to\n" +
+            '  share above. Find it with:  ipconfig getifaddr en0\n',
         );
       }
     }

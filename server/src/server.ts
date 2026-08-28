@@ -148,6 +148,14 @@ export class PixelAgentsServer {
     return this.config;
   }
 
+  /** Whether THIS process started the server, as opposed to reusing one that
+   *  was already running. Matters to the caller because a reused server was
+   *  bound with somebody else's --host: telling colleagues to use a LAN
+   *  address that the running server never bound to sends them nowhere. */
+  ownsItsServer(): boolean {
+    return this.ownsServer;
+  }
+
   /** The token colleagues present to report agents into this office. Null when
    *  this process reused someone else's server rather than starting one. */
   getTeamHostToken(): string | null {
