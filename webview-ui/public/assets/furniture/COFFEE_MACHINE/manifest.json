@@ -1,0 +1,32 @@
+{
+  "id": "COFFEE_MACHINE",
+  "name": "Coffee Machine",
+  "category": "electronics",
+  "type": "group",
+  "groupType": "state",
+  "canPlaceOnWalls": false,
+  "canPlaceOnSurfaces": false,
+  "backgroundTiles": 1,
+  "members": [
+    {
+      "type": "asset",
+      "id": "COFFEE_MACHINE_OFF",
+      "file": "COFFEE_MACHINE_OFF.png",
+      "width": 16,
+      "height": 32,
+      "footprintW": 1,
+      "footprintH": 2,
+      "state": "off"
+    },
+    {
+      "type": "asset",
+      "id": "COFFEE_MACHINE_ON",
+      "file": "COFFEE_MACHINE_ON.png",
+      "width": 16,
+      "height": 32,
+      "footprintW": 1,
+      "footprintH": 2,
+      "state": "on"
+    }
+  ]
+}

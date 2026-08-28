@@ -7,7 +7,8 @@
  * pod spacing, the seat count and the branding are all one edit away. Run it
  * again after changing a constant and the whole office re-flows.
  *
- *   node scripts/generate-office-layout.mjs
+ *   node scripts/generate-office-layout.mjs            the furnished office
+ *   node scripts/generate-office-layout.mjs --empty    same room, nothing in it
  *
  * Writes webview-ui/public/assets/default-layout-1.json (what a fresh office
  * starts with) and a copy next to it that can be imported into an office that
@@ -36,6 +37,12 @@ const ROWS = 35;
 const POD_COLS = [2, 7, 12, 17, 22, 27, 32, 37];
 const POD_ROWS = [3, 7, 11, 15, 19, 23];
 
+/** --empty gives the same walled, floored room with no furniture at all: a
+ *  canvas to build on by hand. Painting every tile from a blank grid in the
+ *  editor is tedious, so the floor and walls stay -- it is the furniture that
+ *  gets out of the way. */
+const EMPTY = process.argv.includes('--empty');
+
 const tiles = new Array(COLS * ROWS).fill(TILE.VOID);
 const tileColors = new Array(COLS * ROWS).fill(null);
 const furniture = [];
@@ -58,6 +65,7 @@ function fill(col0, row0, col1, row1, type, color = null) {
 }
 
 function place(type, col, row) {
+  if (EMPTY) return;
   furniture.push({ uid: nextUid(), type, col, row });
 }
 
@@ -154,9 +162,20 @@ const layout = {
 };
 
 const json = `${JSON.stringify(layout)}\n`;
-writeFileSync(join(ASSETS, 'default-layout-1.json'), json);
-writeFileSync(join(ASSETS, 'code14-office-layout.json'), json);
+if (EMPTY) {
+  // Deliberately NOT written over the bundled default: an empty room is a
+  // scratch pad for one person, not what a fresh office should start as.
+  writeFileSync(join(ASSETS, 'empty-office-layout.json'), json);
+} else {
+  writeFileSync(join(ASSETS, 'default-layout-1.json'), json);
+  writeFileSync(join(ASSETS, 'code14-office-layout.json'), json);
+}
 
-console.log(`CODE14 office: ${COLS}x${ROWS}, ${furniture.length} pieces, ${seats} seats`);
-console.log('  → webview-ui/public/assets/default-layout-1.json  (new offices)');
-console.log('  → webview-ui/public/assets/code14-office-layout.json  (Settings → Import Layout)');
+if (EMPTY) {
+  console.log(`Empty room: ${COLS}x${ROWS}, floor and walls only`);
+  console.log('  → webview-ui/public/assets/empty-office-layout.json  (Settings → Import Layout)');
+} else {
+  console.log(`CODE14 office: ${COLS}x${ROWS}, ${furniture.length} pieces, ${seats} seats`);
+  console.log('  → webview-ui/public/assets/default-layout-1.json  (new offices)');
+  console.log('  → webview-ui/public/assets/code14-office-layout.json  (Settings → Import Layout)');
+}

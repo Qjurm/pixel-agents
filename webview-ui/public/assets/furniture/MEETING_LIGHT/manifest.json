@@ -1,0 +1,32 @@
+{
+  "id": "MEETING_LIGHT",
+  "name": "Meeting Light",
+  "category": "wall",
+  "type": "group",
+  "groupType": "state",
+  "canPlaceOnWalls": true,
+  "canPlaceOnSurfaces": false,
+  "backgroundTiles": 0,
+  "members": [
+    {
+      "type": "asset",
+      "id": "MEETING_LIGHT_OFF",
+      "file": "MEETING_LIGHT_OFF.png",
+      "width": 16,
+      "height": 32,
+      "footprintW": 1,
+      "footprintH": 2,
+      "state": "off"
+    },
+    {
+      "type": "asset",
+      "id": "MEETING_LIGHT_ON",
+      "file": "MEETING_LIGHT_ON.png",
+      "width": 16,
+      "height": 32,
+      "footprintW": 1,
+      "footprintH": 2,
+      "state": "on"
+    }
+  ]
+}

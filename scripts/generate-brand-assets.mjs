@@ -844,21 +844,21 @@ function drawDeskLaptop(c, x, lit, deck = 11) {
   const drawWhiteDesk = (c) => {
     // Top slab, lit along its back edge so it reads as a surface and not a wall.
     c.rect(2, DECK, 44, 1, C.whiteLit);
-    c.rect(2, DECK + 1, 44, 6, C.white);
-    c.rect(2, DECK + 7, 44, 1, C.whiteEdge);
+    c.rect(2, DECK + 1, 44, 7, C.white);
+    c.rect(2, DECK + 8, 44, 1, C.whiteEdge);
     // A one-pixel shadow directly beneath the slab gives it thickness.
-    c.rect(3, DECK + 8, 42, 1, C.whiteShadow);
+    c.rect(3, DECK + 9, 42, 1, C.whiteShadow);
 
-    // Two T-legs: posts wide enough to look load-bearing, feet no wider than
-    // they must be. The earlier 4px post under a 10px foot splayed outward and
-    // read as a folding trestle. The space between the legs is left transparent
-    // on purpose -- an open underside is most of what distinguishes this from
-    // the boxed-in wooden desk at a glance.
-    for (const x of [8, 33]) {
-      c.rect(x, 19, 6, 10, C.white);
-      c.rect(x + 5, 19, 1, 10, C.whiteEdge); // right-hand edge catches shade
-      c.rect(x - 1, 29, 8, 2, C.white);
-      c.rect(x - 1, 31, 8, 1, C.whiteShadow);
+    // Two T-legs, back at their original slim proportions. Widening the posts
+    // was tried and rejected: the frame is not what looked wrong, the thin
+    // tabletop above it was, and a chunkier post just made the desk heavy. The
+    // space between the legs stays transparent -- an open underside is most of
+    // what distinguishes this from the boxed-in wooden desk at a glance.
+    for (const x of [9, 34]) {
+      c.rect(x, 19, 4, 10, C.white);
+      c.rect(x + 3, 19, 1, 10, C.whiteEdge); // right-hand edge catches shade
+      c.rect(x - 3, 29, 10, 2, C.white);
+      c.rect(x - 3, 31, 10, 1, C.whiteShadow);
     }
   };
 
