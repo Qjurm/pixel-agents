@@ -1124,14 +1124,9 @@ export function adoptExternalSessionFromHook(
     // (OpenCode, Copilot) and sessions on a teammate's machine.
     const id = nextAgentIdRef.current++;
     const localName = folderNameResolver?.({ cwd }) ?? (cwd ? path.basename(cwd) : undefined);
-    // Whose agent this is matters more in a shared office than which folder it
-    // sits in, so the label leads with the person. Folder is kept when known:
-    // two of someone's agents are otherwise indistinguishable.
-    const folderName = remoteUser
-      ? localName
-        ? `${remoteUser} · ${localName}`
-        : remoteUser
-      : localName;
+    // The person, never their folder. Two agents of the same person are
+    // told apart by where they sit, not by advertising their projects.
+    const folderName = remoteUser ?? localName;
     const agent: AgentState = {
       id,
       sessionId,

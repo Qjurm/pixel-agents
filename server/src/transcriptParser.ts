@@ -1,6 +1,7 @@
 const debug = process.env.PIXEL_AGENTS_DEBUG !== '0';
 
 import type { HookProvider } from '../../core/src/provider.js';
+import { maskedStatusFor } from './activityMask.js';
 import type { AgentStateStore } from './agentStateStore.js';
 import { TEXT_IDLE_DELAY_MS, TOOL_DONE_DELAY_MS } from './constants.js';
 import { updateContextUsage } from './contextUsage.js';
@@ -84,10 +85,20 @@ export function setTeamSwitchCallback(
   teamSwitchCallback = cb;
 }
 
-/** Format a tool status line. Delegates to the active HookProvider's formatToolStatus.
+/** Format a tool status line: what the office is allowed to say out loud.
  *  Invariant: a provider is registered before any transcript lines are parsed. */
-export function formatToolStatus(toolName: string, input: Record<string, unknown>): string {
-  return hookProvider?.formatToolStatus(toolName, input) ?? `Using ${toolName}`;
+export function formatToolStatus(
+  toolName: string,
+  _input: Record<string, unknown>,
+  seed?: string,
+): string {
+  // The provider's own formatter is deliberately NOT used here any more: it
+  // renders the tool input, which is the file path, the shell command, the
+  // search pattern. The office shows a category and a nonsense phrase instead,
+  // for every agent equally. `_input` stays in the signature because callers
+  // have it to hand and dropping the parameter would silently change every
+  // call site's meaning; it is unused on purpose.
+  return maskedStatusFor(toolName, seed ?? toolName);
 }
 
 export function processTranscriptLine(
@@ -157,7 +168,7 @@ export function processTranscriptLine(
         for (const block of blocks) {
           if (block.type === 'tool_use' && block.id) {
             const toolName = block.name || '';
-            const status = formatToolStatus(toolName, block.input || {});
+            const status = formatToolStatus(toolName, block.input || {}, block.id);
             console.log(
               `[Pixel Agents] JSONL: Agent ${agentId} - tool start: ${block.id} ${status}`,
             );
@@ -579,7 +590,7 @@ function processProgressRecord(
     for (const block of content) {
       if (block.type === 'tool_use' && block.id) {
         const toolName = block.name || '';
-        const status = formatToolStatus(toolName, block.input || {});
+        const status = formatToolStatus(toolName, block.input || {}, block.id);
         console.log(
           `[Pixel Agents] Agent ${agentId} subagent tool start: ${block.id} ${status} (parent: ${parentToolId})`,
         );

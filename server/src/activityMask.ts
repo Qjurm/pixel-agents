@@ -3,13 +3,17 @@
  * doing", plus a nonsense phrase to say it with.
  *
  * A shared office is a room full of colleagues, not an audit log. Tool names,
- * command lines, file paths and folder names are all far more than presence
- * needs, and once they have crossed the network they have crossed it. So the
- * masking happens at the SOURCE -- the hook script sends only what is in here,
- * and a person's own office keeps the full detail it always had.
+ * command lines and file paths are all far more than presence needs, so what
+ * the office SHOWS is a category and a nonsense phrase -- and it shows the same
+ * thing for everybody, the person hosting included. An office where one
+ * person's work is legible and everyone else's is not is not a fair room.
  *
- * This module is imported by the bundled hook script, so it must stay free of
- * any runtime dependency: pure data and pure functions only.
+ * The masking is applied here, in the office, rather than by each reporting
+ * machine. That is a deliberate trade for one-machine hosting on a trusted
+ * network: the detail does reach the server, and the server is the only thing
+ * that has to be updated for the rule to change or improve. Masking at the
+ * source would keep the detail off the wire, but it would also mean every
+ * teammate's build had to be current for the office to be private at all.
  */
 
 /** The whole vocabulary a teammate's activity is reduced to. */
@@ -133,6 +137,22 @@ const PHRASES: Record<ActivityCategory, readonly string[]> = {
   ],
 };
 
+/**
+ * The one call the rest of the server makes: what an agent's activity is
+ * allowed to look like. Note that the tool INPUT is not a parameter -- paths,
+ * commands and prompts have no route to a label from here, by construction.
+ */
+export function maskedStatusFor(toolName: string, seed: string): string {
+  return maskedPhrase(categoriseTool(toolName), seed);
+}
+
+/** The phrases a category may use. Exposed so a caller -- or a test -- can ask
+ *  whether a given label belongs to the category it should have come from,
+ *  without needing to know which of the phrases the seed happened to pick. */
+export function phrasesFor(category: ActivityCategory): readonly string[] {
+  return PHRASES[category];
+}
+
 /** Cheap, stable string hash. Not cryptographic -- it only has to spread. */
 function hash(seed: string): number {
   let h = 2166136261;
@@ -154,4 +174,18 @@ function hash(seed: string): number {
 export function maskedPhrase(category: ActivityCategory, seed: string): string {
   const options = PHRASES[category];
   return options[hash(`${category}:${seed}`) % options.length]!;
+}
+
+/**
+ * The name a character wears in the office.
+ *
+ * Never a folder or a project: which repository someone has open is exactly
+ * the kind of detail a presence display does not need, and in a room shared
+ * with colleagues it is the detail people notice first. A teammate is named by
+ * the label they joined with; the host's own agents fall back to the account
+ * name of the machine, so the office is a room of people rather than a mix of
+ * one person and several directories.
+ */
+export function displayNameFor(remoteUser: string | undefined, hostLabel: string): string {
+  return remoteUser && remoteUser.length > 0 ? remoteUser : hostLabel;
 }

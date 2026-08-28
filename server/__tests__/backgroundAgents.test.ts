@@ -309,7 +309,10 @@ describe('background spawns (teams OFF) classified by sidecar name', () => {
     expect(start!.id).toBe(1);
     expect(start!.parentToolId).toBe(SPAWN_TOOL_ID);
     expect(start!.toolId).toBe(SUB_TOOL_ID);
-    expect(start!.status).toContain('x.ts');
+    // The office says WHAT KIND of work, never which file: a sub-agent's
+    // status goes through the same masking as everyone else's.
+    expect(start!.status).not.toContain('x.ts');
+    expect(String(start!.status).length).toBeGreaterThan(0);
 
     // Per-tool dones are DEFERRED to the sub's turn end: emitting them as they
     // happened made the sub-character flap between typing and idle on every

@@ -5,6 +5,7 @@ import * as crypto from 'crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import Fastify from 'fastify';
 
+import { displayNameFor } from './activityMask.js';
 import type { AgentRuntime } from './agentRuntime.js';
 import type { AgentStateStore } from './agentStateStore.js';
 import type {
@@ -21,6 +22,7 @@ import {
   WS_CLOSE_FORBIDDEN_ORIGIN,
   WS_CLOSE_UNAUTHORIZED,
 } from './constants.js';
+import { hostLabel } from './hostLabel.js';
 import { sanitizeUserLabel } from './teamConfig.js';
 import type { AgentState } from './types.js';
 
@@ -190,7 +192,7 @@ function registerWebSocketRoute(app: FastifyInstance, options: HttpServerOptions
       safeSend(socket, {
         type: 'agentCreated',
         id,
-        folderName: agent.folderName,
+        folderName: displayNameFor(agent.remoteUser, hostLabel()),
         isExternal: agent.isExternal || undefined,
         isTeammate: agent.leadAgentId !== undefined || undefined,
         teammateName: agent.agentName,

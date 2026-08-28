@@ -1,4 +1,5 @@
 import type { HookProvider } from '../../core/src/provider.js';
+import { displayNameFor } from './activityMask.js';
 import { resendAgentActivity } from './agentActivityResend.js';
 import { buildAgentDiagnostics } from './agentDiagnostics.js';
 import type { AgentRuntime } from './agentRuntime.js';
@@ -12,6 +13,7 @@ import {
   writeConfig,
 } from './configPersistence.js';
 import { HUE_SHIFT_MAX_DEG, PALETTE_COUNT } from './constants.js';
+import { hostLabel } from './hostLabel.js';
 import { readLayoutFromFile, writeLayoutToFile } from './layoutPersistence.js';
 import type { ConsentEffects } from './providers/hook/consentExecutor.js';
 import { applyConsentChoice } from './providers/hook/consentExecutor.js';
@@ -485,9 +487,8 @@ function handleWebviewReady(send: WsSend, ctx: ClientMessageContext): void {
   const agentMeta: Record<number, { palette?: number; hueShift?: number; seatId?: string }> = {};
   for (const [id, agent] of store) {
     agentIds.push(id);
-    if (agent.folderName) {
-      folderNames[id] = agent.folderName;
-    }
+    // Same rule as every other broadcast: a person's name, never their project.
+    folderNames[id] = displayNameFor(agent.remoteUser, hostLabel());
     if (agent.isExternal) {
       externalAgents[id] = true;
     }

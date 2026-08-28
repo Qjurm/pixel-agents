@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { phrasesFor } from '../src/activityMask.js';
 import { AgentStateStore } from '../src/agentStateStore.js';
 import { HookEventHandler } from '../src/hookEventHandler.js';
 import { claudeProvider } from '../src/providers/hook/claude/claude.js';
@@ -465,29 +466,26 @@ describe('HookEventHandler', () => {
 
   // ── PreToolUse / PostToolUse ─────────────────────────────────
 
-  it("shows a teammate's nonsense phrase instead of what they are actually doing", () => {
-    // The masking happens on the reporting machine, so by the time an event
-    // reaches here the real tool is already gone and the phrase is all there
-    // is. This asserts the office SAYS the phrase rather than falling back to
-    // describing the stand-in tool it was handed.
-    const agent = createTestAgent({ id: 1, remoteUser: 'sanne', hooksOnly: true });
+  it('never lets a tool input reach the status line', () => {
+    // The point of the masking: a path handed to the office must not come back
+    // out of it as a label, for a teammate OR for the person hosting.
+    const agent = createTestAgent({ id: 1 });
     agents.set(1, agent);
     handler.registerAgent('sess-1', 1);
 
     handler.handleEvent('claude', {
       hook_event_name: 'PreToolUse',
       session_id: 'sess-1',
-      tool_name: 'Edit',
-      __pixelAgentsTeamUser: 'sanne',
-      __pixelAgentsActivity: 'writing',
-      __pixelAgentsPhrase: 'combobulating the splines',
+      tool_name: 'Read',
+      tool_input: { file_path: '/src/salaris-geheim.ts' },
     });
 
     const toolMsg = mockWebview.messages.find((m) => m.type === 'agentToolStart');
-    expect(toolMsg?.status).toBe('combobulating the splines');
+    expect(toolMsg?.status).not.toContain('salaris');
+    expect(toolMsg?.status).not.toContain('.ts');
   });
 
-  it('PreToolUse sends agentToolStart with formatted status', () => {
+  it('PreToolUse sends agentToolStart with a masked status', () => {
     const agent = createTestAgent({ id: 1, isWaiting: true });
     agents.set(1, agent);
     handler.registerAgent('sess-1', 1);
@@ -502,7 +500,9 @@ describe('HookEventHandler', () => {
     const toolMsg = mockWebview.messages.find((m) => m.type === 'agentToolStart');
     expect(toolMsg).toBeTruthy();
     expect(toolMsg?.toolName).toBe('Read');
-    expect(toolMsg?.status).toBe('Reading server.ts');
+    // A reading tool gets one of the reading phrases -- which one depends on
+    // the tool id, so this pins the category rather than the exact words.
+    expect(phrasesFor('reading')).toContain(toolMsg?.status);
     expect(agent.currentHookToolId).toBeTruthy();
   });
 

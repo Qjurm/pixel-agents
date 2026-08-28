@@ -4,7 +4,6 @@ import * as https from 'https';
 import * as os from 'os';
 import * as path from 'path';
 
-import { categoriseTool, maskedPhrase, representativeTool } from '../../../../activityMask.js';
 import {
   HOOK_API_PREFIX,
   SERVER_JSON_DIR,
@@ -13,7 +12,6 @@ import {
   TEAM_POST_TIMEOUT_MS,
   TEAM_USER_HEADER,
 } from '../../../../constants.js';
-import { TEAM_EVENT_ACTIVITY_FIELD, TEAM_EVENT_PHRASE_FIELD } from '../../../../constants.js';
 import type { ServerConfig, ServerTarget } from '../../../../serverConfig.js';
 import { isServerConfig, isServerTarget } from '../../../../serverConfig.js';
 import type { TeamServer } from '../../../../teamConfig.js';
@@ -196,55 +194,6 @@ function postToServer(
   });
 }
 
-/**
- * Build the version of an event that is allowed to leave this machine.
- *
- * A WHITELIST, not a redaction pass: the result is assembled from scratch out
- * of named fields, so a field this code has never heard of -- a new key in a
- * future Claude release, an MCP server's extra metadata -- cannot leak by
- * having been forgotten. What survives is the event name, the session id, the
- * flags that drive lifecycle logic, and one coarse activity category.
- *
- * Deliberately NOT forwarded: tool_input (paths, commands, prompts, diffs),
- * tool_name (the real one), cwd and transcript_path (which name the project
- * and the person's own directory layout).
- */
-function maskForTeam(data: Record<string, unknown>): Record<string, unknown> {
-  const masked: Record<string, unknown> = {
-    hook_event_name: data.hook_event_name,
-    session_id: data.session_id,
-  };
-
-  // Enum-ish lifecycle fields: fixed vocabularies from the CLI, no free text.
-  // Without them /clear and /resume stop being recognised and a session's
-  // ending cannot be told from a crash.
-  for (const key of ['source', 'reason', 'notification_type', 'agent_type']) {
-    if (typeof data[key] === 'string') masked[key] = data[key];
-  }
-
-  if (typeof data.tool_name === 'string' && data.tool_name.length > 0) {
-    const category = categoriseTool(data.tool_name);
-    // A stand-in name so the office still animates, plus the phrase it may say.
-    masked.tool_name = representativeTool(category);
-    masked[TEAM_EVENT_ACTIVITY_FIELD] = category;
-    // Seeded on the session and the event's own arrival, so one activity keeps
-    // one phrase while consecutive activities differ.
-    masked[TEAM_EVENT_PHRASE_FIELD] = maskedPhrase(
-      category,
-      `${String(data.session_id ?? '')}:${String(data.tool_name)}`,
-    );
-    // run_in_background changes which character represents the work, so it has
-    // to survive; it is one bit and names nothing.
-    const input = data.tool_input;
-    if (input !== null && typeof input === 'object') {
-      const runInBackground = (input as Record<string, unknown>).run_in_background;
-      if (runInBackground === true) masked.tool_input = { run_in_background: true };
-    }
-  }
-
-  return masked;
-}
-
 async function main(): Promise<void> {
   let input = '';
   for await (const chunk of process.stdin) input += chunk;
@@ -297,13 +246,11 @@ async function main(): Promise<void> {
     `fan-out event=${eventName} sid=${sid} local=${servers.length} team=${teamServers.length}`,
   );
 
+  // One payload for every destination. The office decides what is shown --
+  // masking lives there now, so a machine on an older build cannot make the
+  // office leak, and improving the rule does not need everyone to rebuild.
   const body = JSON.stringify(data);
-  // Two different payloads: your own office gets everything, a shared office
-  // gets only what maskForTeam allows through. Built once, not per target.
-  const teamBody = teamServers.length > 0 ? JSON.stringify(maskForTeam(data)) : '';
-  await Promise.all(
-    targets.map((target) => postToServer(target, target.user ? teamBody : body, eventName, sid)),
-  );
+  await Promise.all(targets.map((target) => postToServer(target, body, eventName, sid)));
 }
 
 main()
