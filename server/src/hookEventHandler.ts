@@ -2,7 +2,11 @@ import * as path from 'path';
 
 import type { AgentEvent, HookProvider } from '../../core/src/provider.js';
 import type { AgentStateStore } from './agentStateStore.js';
-import { SESSION_END_GRACE_MS, TEAM_EVENT_USER_FIELD } from './constants.js';
+import {
+  SESSION_END_GRACE_MS,
+  TEAM_EVENT_PHRASE_FIELD,
+  TEAM_EVENT_USER_FIELD,
+} from './constants.js';
 import type { SessionRouter } from './sessionRouter.js';
 import { getInlineTeammates, hasInlineTeammates, hasPromotedBackgroundAgent } from './teamUtils.js';
 import { cancelPermissionTimer, cancelWaitingTimer } from './timerManager.js';
@@ -379,7 +383,14 @@ export class HookEventHandler {
       case 'sessionEnd':
         return this.handleSessionEnd(normEvent, agent, agentId);
       case 'toolStart':
-        return this.handlePreToolUse(normEvent, agent, agentId);
+        return this.handlePreToolUse(
+          normEvent,
+          agent,
+          agentId,
+          typeof event[TEAM_EVENT_PHRASE_FIELD] === 'string'
+            ? (event[TEAM_EVENT_PHRASE_FIELD] as string)
+            : undefined,
+        );
       case 'toolEnd':
         // Both PostToolUse and PostToolUseFailure normalize to toolEnd. Distinguishing
         // them inside handlers would require extra info; the existing behavior was
@@ -463,10 +474,15 @@ export class HookEventHandler {
     normEvent: Extract<AgentEvent, { kind: 'toolStart' }>,
     agent: AgentState,
     agentId: number,
+    /** Set for a masked team event: what the office should SAY this agent is
+     *  doing. The reporting machine chose the words, because it is the only
+     *  side that still knows the real tool -- everything here sees is the
+     *  stand-in name. */
+    maskedStatus?: string,
   ): void {
     const toolName = normEvent.toolName;
     const toolInput = (normEvent.input as Record<string, unknown> | undefined) ?? {};
-    const status = this.provider.formatToolStatus(toolName, toolInput);
+    const status = maskedStatus ?? this.provider.formatToolStatus(toolName, toolInput);
     const hookToolId = `hook-${Date.now()}`;
 
     // Track for PostToolUse/SubagentStart correlation (always, even if suppressed below).

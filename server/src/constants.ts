@@ -146,6 +146,12 @@ export const TEAM_EVENT_USER_FIELD = '__pixelAgentsTeamUser';
 export const REMOTE_PRESENCE_TIMEOUT_MS = 900_000; // 15 minutes
 /** How often to sweep for teammates who stopped reporting. */
 export const REMOTE_PRESENCE_CHECK_INTERVAL_MS = 60_000; // 1 minute
+/** Field carrying the coarse activity category on a masked team event. */
+export const TEAM_EVENT_ACTIVITY_FIELD = '__pixelAgentsActivity';
+/** Field carrying the nonsense phrase the office should display for it. The
+ *  phrase is chosen on the REPORTING machine, so the office never needs the
+ *  real tool name to produce a label. */
+export const TEAM_EVENT_PHRASE_FIELD = '__pixelAgentsPhrase';
 /** POST timeout for a team server. Longer than the 2s loopback budget because
  *  the hop is a real network, short enough that an unreachable office never
  *  becomes a visible stall in the agent it is reporting on. */

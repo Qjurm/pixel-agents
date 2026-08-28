@@ -465,6 +465,28 @@ describe('HookEventHandler', () => {
 
   // ── PreToolUse / PostToolUse ─────────────────────────────────
 
+  it("shows a teammate's nonsense phrase instead of what they are actually doing", () => {
+    // The masking happens on the reporting machine, so by the time an event
+    // reaches here the real tool is already gone and the phrase is all there
+    // is. This asserts the office SAYS the phrase rather than falling back to
+    // describing the stand-in tool it was handed.
+    const agent = createTestAgent({ id: 1, remoteUser: 'sanne', hooksOnly: true });
+    agents.set(1, agent);
+    handler.registerAgent('sess-1', 1);
+
+    handler.handleEvent('claude', {
+      hook_event_name: 'PreToolUse',
+      session_id: 'sess-1',
+      tool_name: 'Edit',
+      __pixelAgentsTeamUser: 'sanne',
+      __pixelAgentsActivity: 'writing',
+      __pixelAgentsPhrase: 'combobulating the splines',
+    });
+
+    const toolMsg = mockWebview.messages.find((m) => m.type === 'agentToolStart');
+    expect(toolMsg?.status).toBe('combobulating the splines');
+  });
+
   it('PreToolUse sends agentToolStart with formatted status', () => {
     const agent = createTestAgent({ id: 1, isWaiting: true });
     agents.set(1, agent);
