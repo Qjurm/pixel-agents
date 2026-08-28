@@ -25,12 +25,15 @@ import {
   getHooksEnabled,
   grantHooksConsent,
   readConfig,
+  setHooksEnabled,
 } from './configPersistence.js';
 import { MAX_PORT, MIN_PORT } from './constants.js';
 import { FileStateAdapter } from './fileStateAdapter.js';
 import { claudeProvider, copyHookScript, hookProviderById } from './providers/index.js';
 import { PixelAgentsServer } from './server.js';
 import {
+  isOwnOffice,
+  localServerPorts,
   parseJoinUrl,
   readTeamServers,
   sameAddress,
@@ -53,6 +56,8 @@ export interface CliArgs {
   as?: string;
   /** --token <token>: team server token, when the --join URL carries none. */
   token?: string;
+  /** --yes: accept the hook install without the interactive question. */
+  yes?: boolean;
 }
 
 /** Thrown by parseArgs on an invalid --port. Kept separate from process.exit so
@@ -93,6 +98,8 @@ export function parseArgs(argv: string[]): CliArgs {
     } else if (argv[i] === '--token' && argv[i + 1]) {
       args.token = argv[i + 1];
       i++;
+    } else if (argv[i] === '--yes' || argv[i] === '-y') {
+      args.yes = true;
     } else if (argv[i] === '--help') {
       console.log(`Usage: pixel-agents [options]
 
@@ -106,11 +113,12 @@ Shared office (multiplayer):
                         Paste the URL that office printed, token included.
   --as <label>          Name for this machine's agents there (default: $USER)
   --token <token>       Token, when the --join URL carries none
+  --yes, -y             Install the Claude hooks without asking
   --leave <url>         Stop reporting to that office
 
-  Joining and leaving only edit ~/.pixel-agents/team.json and exit; they never
-  start a server. To HOST an office for your team, bind it where colleagues can
-  reach it and hand them the printed URL:
+  Joining sets up everything this machine needs and exits -- it never starts a
+  server. To HOST an office for your team, bind it where colleagues can reach it
+  and hand them the printed URL:
 
     pixel-agents --host 0.0.0.0 --port 3100`);
       process.exit(0);
@@ -164,7 +172,7 @@ function firstNonLoopbackAddress(): string | undefined {
  * result. Exits the process non-zero on a bad address rather than starting a
  * server, so a typo in a URL can't quietly leave someone reporting nowhere.
  */
-function applyTeamMembership(args: CliArgs): void {
+async function applyTeamMembership(args: CliArgs, packageRoot: string): Promise<void> {
   const existing = readTeamServers();
 
   if (args.leave) {
@@ -194,6 +202,21 @@ function applyTeamMembership(args: CliArgs): void {
     process.exit(1);
   }
   const server = parsed.server;
+
+  // Joining your own office is the one join that makes things worse rather than
+  // better: every event then arrives twice at the same server and which copy
+  // wins is a race. What the host actually wants is the tracked-project gate
+  // widened, so point at that instead of at a workaround.
+  if (isOwnOffice(server, localServerPorts())) {
+    console.error(
+      `[Pixel Agents] ${server.host}:${server.port} is an office on THIS machine — not joining.\n` +
+        '               Your own agents already reach it directly. If you cannot see them,\n' +
+        '               the reason is the project filter, not membership:\n' +
+        '                 • turn on Settings -> Watch All Sessions, or\n' +
+        '                 • start the office from the folder you work in.',
+    );
+    process.exit(1);
+  }
   // Re-joining an address replaces that entry rather than stacking a second
   // one: a rotated token or a changed label is the common reason to re-run it.
   const next = [...existing.filter((entry) => !sameAddress(entry, server)), server];
@@ -204,14 +227,83 @@ function applyTeamMembership(args: CliArgs): void {
   );
   console.log(`[Pixel Agents] Membership saved to ${teamJsonPath()}`);
   console.log(
-    '[Pixel Agents] Your Claude sessions on this machine will now also appear there.\n' +
-      '               Hooks must be installed locally for this to work — run pixel-agents\n' +
-      '               once and approve them if you have not already.',
-  );
-  console.log(
     '[Pixel Agents] Note: what is shared is agent ACTIVITY — the folder name, tool names,\n' +
       '               and file paths your agents touch. Not your prompts or code.',
   );
+
+  // Membership alone reports nothing: the hook entries in the agent's own
+  // settings file are what actually produce events. Leaving that to a second,
+  // separate trip through the browser UI was the step people skipped, and a
+  // machine that joined but never installed hooks looks identical to a broken
+  // network. So finish the job here.
+  await ensureHooksInstalled(args, packageRoot);
+}
+
+/**
+ * Install the Claude hooks as part of joining, asking first.
+ *
+ * The in-app dialog remains the way the GUI asks, and an already-granted
+ * consent is not re-asked. This path exists because `--join` is itself an
+ * explicit, interactive instruction to wire this machine up; refusing to act on
+ * it without a browser round-trip is what made joining feel broken. The write
+ * is still never silent: a fresh machine gets the provider's own disclosure and
+ * has to answer, and a non-interactive shell is told what to run rather than
+ * being decided for.
+ */
+async function ensureHooksInstalled(args: CliArgs, packageRoot: string): Promise<void> {
+  if (await claudeProvider.areHooksInstalled()) {
+    console.log('[Pixel Agents] Claude hooks already installed — nothing else to do.');
+    return;
+  }
+
+  if (getHooksConsent(claudeProvider.id) !== 'granted' && !args.yes) {
+    const { headline, disclosure } = claudeProvider.consentDisclosure();
+    console.log(`\n  ${headline}\n`);
+    for (const line of disclosure.split('\n')) console.log(`  ${line}`);
+    console.log('');
+    if (!(await askYesNo('  Install the Claude hooks now? [y/N] '))) {
+      console.log(
+        '\n[Pixel Agents] Left your Claude settings alone. You are joined, but nothing will\n' +
+          '               report until hooks are on — re-run with --yes, or enable\n' +
+          '               "Instant Detection (Hooks)" in the app settings.',
+      );
+      return;
+    }
+  }
+
+  if (!copyHookScriptOrReport(packageRoot, ' (join)')) return;
+  try {
+    // The claude installer ignores both arguments -- the hook script discovers
+    // servers on its own -- so a machine with no local server installs fine.
+    await claudeProvider.installHooks('', '');
+    grantHooksConsent(claudeProvider.id);
+    setHooksEnabled(claudeProvider.id, true);
+    console.log('[Pixel Agents] Claude hooks installed. Start Claude anywhere and you appear.');
+  } catch (err) {
+    console.error(
+      `[Pixel Agents] Hook install failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
+/**
+ * Ask a yes/no question on the terminal. A non-TTY stdin (a script, a pipe, CI)
+ * gets `false` rather than a hang -- the caller then prints how to proceed
+ * explicitly, which is the honest outcome for an unattended run.
+ */
+async function askYesNo(question: string): Promise<boolean> {
+  if (!process.stdin.isTTY) {
+    console.log(`${question}(not a terminal — assuming no)`);
+    return false;
+  }
+  const readline = await import('readline');
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const answer = await new Promise<string>((resolve) => rl.question(question, resolve));
+    return /^y(es)?$/i.test(answer.trim());
+  } finally {
+    rl.close();
+  }
 }
 
 async function main(): Promise<void> {
@@ -226,14 +318,15 @@ async function main(): Promise<void> {
   // Joining and leaving are config edits, not a server run: they finish before
   // any asset loading or port binding so `--join` on a machine that never hosts
   // an office is instant and side-effect-free beyond the one file it writes.
-  if (args.join || args.leave) {
-    applyTeamMembership(args);
-    return;
-  }
-
   // dist/ contains both the CLI bundle and the assets/ + webview/ directories
   const distRoot = __dirname;
   const packageRoot = path.dirname(distRoot);
+
+  if (args.join || args.leave) {
+    await applyTeamMembership(args, packageRoot);
+    return;
+  }
+
   const staticDir = path.join(distRoot, 'webview');
 
   // ── Load assets on startup (same pipeline as VS Code extension) ──
@@ -453,6 +546,17 @@ async function main(): Promise<void> {
         '  That token only accepts agent events. Keep the URL above (with ?token=) to\n' +
           "  yourself: it is the one that can change this machine's Claude settings.\n",
       );
+      // The trap this catches: teammates bypass the tracked-project gate, so a
+      // host who works outside the folder they launched from sees EVERYONE
+      // except themselves -- and reads that as the feature being broken.
+      if (!readConfig().standalone?.watchAllSessions) {
+        console.log(
+          '  Heads up: your own agents only show up for work inside\n' +
+            `  ${process.cwd()}\n` +
+            '  Turn on Settings -> Watch All Sessions to see your other projects too\n' +
+            '  (that also shows them to everyone watching this office).\n',
+        );
+      }
     }
 
     // ── Graceful shutdown ──

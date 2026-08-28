@@ -38,6 +38,24 @@ export const CONSENT_FACT_DATA =
   'server on this machine. Everything stays local - the server listens only on 127.0.0.1 - unless ' +
   'you explicitly start it with --host to expose it on your network.';
 
+/** WHERE ELSE the data goes, once this machine has joined a shared office.
+ *
+ *  CONSENT_FACT_DATA names `--host` as the one thing that stops events being
+ *  local. Joining a team office is a SECOND such thing, and a bigger one: it
+ *  does not merely accept connections, it actively sends every event to a
+ *  server on somebody else's machine. Leaving the disclosure at "everything
+ *  stays local" once a team.json exists would make this prompt state the
+ *  opposite of what the software then does, so the fact is built per-ask
+ *  rather than frozen at module load. */
+export function consentFactTeam(addresses: string[]): string {
+  const where = addresses.join(', ');
+  return (
+    `This machine has joined a shared office at ${where}. The same events - tool names, tool ` +
+    'inputs, and the folders your agents work in - are also sent there, to a Pixel Agents server ' +
+    'on another machine, unencrypted over your network. Leave with: pixel-agents --leave <url>'
+  );
+}
+
 /** HOW to undo it. */
 export const CONSENT_FACT_REVERSIBLE =
   'You can remove the hooks at any time from Settings → Instant Detection (Hooks).';
@@ -61,3 +79,21 @@ export const CONSENT_DISCLOSURE = [
   CONSENT_FACT_DATA,
   CONSENT_FACT_REVERSIBLE,
 ].join('\n\n');
+
+/**
+ * The disclosure for one ask, given the shared offices this machine reports to.
+ *
+ * With no offices this is exactly CONSENT_DISCLOSURE, so the common case has
+ * one authored copy and no divergence. With offices, the team fact is inserted
+ * directly after the data fact it qualifies -- not appended at the end, where a
+ * reader who stopped at "everything stays local" would never reach it.
+ */
+export function buildConsentDisclosure(teamAddresses: string[]): string {
+  if (teamAddresses.length === 0) return CONSENT_DISCLOSURE;
+  return [
+    CONSENT_FACT_WHAT,
+    CONSENT_FACT_DATA,
+    consentFactTeam(teamAddresses),
+    CONSENT_FACT_REVERSIBLE,
+  ].join('\n\n');
+}

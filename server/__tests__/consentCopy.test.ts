@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildConsentDisclosure,
   CONSENT_DISCLOSURE,
   CONSENT_INSTALL_HEADLINE,
 } from '../src/providers/hook/claude/consentCopy.js';
@@ -64,5 +65,42 @@ describe('consent copy', () => {
   // would be a silent legibility regression.
   it('is a paragraph-separated block', () => {
     expect(CONSENT_DISCLOSURE.split('\n\n')).toHaveLength(3);
+  });
+});
+
+/**
+ * Once a machine has joined a shared office, the base disclosure's "everything
+ * stays local" is no longer true of it: events are actively sent to a server on
+ * someone else's machine. A consent prompt that misstates where data goes is
+ * worse than no prompt, so these pin the corrected version.
+ */
+describe('consent copy with a shared office', () => {
+  it('is byte-identical to the base copy when no office has been joined', () => {
+    // One authored copy for the common case; no second version to drift.
+    expect(buildConsentDisclosure([])).toBe(CONSENT_DISCLOSURE);
+  });
+
+  it('names the office and says the events go to another machine', () => {
+    const disclosure = buildConsentDisclosure(['10.0.0.5:3100']);
+    expect(disclosure).toContain('10.0.0.5:3100');
+    expect(disclosure).toContain('on another machine');
+    expect(disclosure).toContain('unencrypted');
+    expect(disclosure).toContain('--leave');
+  });
+
+  it('names every office, not just the first', () => {
+    const disclosure = buildConsentDisclosure(['10.0.0.5:3100', 'office.internal:443']);
+    expect(disclosure).toContain('10.0.0.5:3100');
+    expect(disclosure).toContain('office.internal:443');
+  });
+
+  it('places the office fact directly after the locality claim it qualifies', () => {
+    // Appended at the end it would sit after "you can remove the hooks", past
+    // the point a reader who accepted "stays local" would still be reading.
+    const paragraphs = buildConsentDisclosure(['10.0.0.5:3100']).split('\n\n');
+    const localityIndex = paragraphs.findIndex((par) => par.includes('127.0.0.1'));
+    const teamIndex = paragraphs.findIndex((par) => par.includes('10.0.0.5:3100'));
+    expect(localityIndex).toBeGreaterThanOrEqual(0);
+    expect(teamIndex).toBe(localityIndex + 1);
   });
 });

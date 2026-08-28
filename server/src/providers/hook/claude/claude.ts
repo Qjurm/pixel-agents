@@ -8,13 +8,14 @@ import {
   BASH_COMMAND_DISPLAY_MAX_LENGTH,
   TASK_DESCRIPTION_DISPLAY_MAX_LENGTH,
 } from '../../../constants.js';
+import { readTeamServers } from '../../../teamConfig.js';
 import {
   areHooksInstalled as installerAreHooksInstalled,
   installHooks as installerInstallHooks,
   uninstallHooks as installerUninstallHooks,
 } from './claudeHookInstaller.js';
 import { claudeTeamProvider } from './claudeTeamProvider.js';
-import { CONSENT_DISCLOSURE, CONSENT_INSTALL_HEADLINE } from './consentCopy.js';
+import { buildConsentDisclosure, CONSENT_INSTALL_HEADLINE } from './consentCopy.js';
 import {
   CLAUDE_LARGE_CONTEXT_WINDOW,
   CLAUDE_SMALL_CONTEXT_MODEL_PATTERN,
@@ -267,7 +268,14 @@ function areHooksInstalled(): Promise<boolean> {
  *  consentCopy.ts (Claude-specific facts: the event count, the settings
  *  path); the shared consent gate ships them verbatim to the Intro. */
 function consentDisclosure(): { headline: string; disclosure: string } {
-  return { headline: CONSENT_INSTALL_HEADLINE, disclosure: CONSENT_DISCLOSURE };
+  // Read the memberships at ask time, not at module load: a machine can join an
+  // office between the server starting and the user answering, and the answer
+  // must be informed by where the events will actually go.
+  const addresses = readTeamServers().map((server) => `${server.host}:${server.port}`);
+  return {
+    headline: CONSENT_INSTALL_HEADLINE,
+    disclosure: buildConsentDisclosure(addresses),
+  };
 }
 
 // ── Context windows ──

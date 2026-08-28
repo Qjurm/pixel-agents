@@ -1,11 +1,23 @@
-import { describe, expect, it } from 'vitest';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { describe, expect, it, vi } from 'vitest';
 
-import {
-  CONSENT_DISCLOSURE,
-  CONSENT_INSTALL_HEADLINE,
-} from '../src/providers/hook/claude/consentCopy.js';
-import { consentActionFor, hooksConsentRequest } from '../src/providers/hook/consentGate.js';
-import { claudeProvider } from '../src/providers/index.js';
+// The disclosure names any shared office this machine reports to, so it reads
+// ~/.pixel-agents/team.json. Without an isolated home these tests would assert
+// against whatever offices the DEVELOPER happens to have joined.
+const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'pxl-consent-gate-'));
+
+vi.mock('os', async () => {
+  const actual = await vi.importActual<typeof import('os')>('os');
+  return { ...actual, homedir: () => tmpHome };
+});
+
+const { CONSENT_DISCLOSURE, CONSENT_INSTALL_HEADLINE } =
+  await import('../src/providers/hook/claude/consentCopy.js');
+const { consentActionFor, hooksConsentRequest } =
+  await import('../src/providers/hook/consentGate.js');
+const { claudeProvider } = await import('../src/providers/index.js');
 
 /**
  * consentGate is the ONE place both surfaces decide whether to ask for hooks consent and what an answer means, per

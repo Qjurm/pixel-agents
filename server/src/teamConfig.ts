@@ -7,6 +7,7 @@ import {
   MAX_PORT,
   MIN_PORT,
   SERVER_JSON_DIR,
+  SERVERS_DIR,
   TEAM_HOST_TOKEN_NAME,
   TEAM_JSON_NAME,
   TEAM_USER_LABEL_MAX,
@@ -186,4 +187,58 @@ export function readOrCreateTeamHostToken(
   // 0600: the whole point of this file is that it is a secret.
   fs.writeFileSync(filePath, `${token}\n`, { encoding: 'utf-8', mode: 0o600 });
   return token;
+}
+
+/**
+ * True when this address is an office running on THIS machine.
+ *
+ * Joining your own office is a natural mistake -- the instructions say
+ * "colleagues join", and the host also wants to see themselves -- but it makes
+ * every event arrive twice at the same server: once unlabelled over loopback
+ * from the local registry, once labelled as a teammate. The pending-session
+ * record is keyed by session id and last-write-wins, so which of the two
+ * decides your fate is a race, and the labelled path additionally gives up
+ * transcript reading for a session whose transcript is right here.
+ *
+ * Detection is deliberately conservative: a loopback name, or one of this
+ * machine's own interface addresses, combined with a port some local server has
+ * registered. A hostname that resolves here through DNS is not caught, which is
+ * why the caller treats a negative as "probably fine" rather than proof.
+ */
+export function isOwnOffice(server: TeamServer, localPorts: number[]): boolean {
+  if (!localPorts.includes(server.port)) return false;
+  const host = server.host.toLowerCase();
+  if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '0.0.0.0') {
+    return true;
+  }
+  for (const addrs of Object.values(os.networkInterfaces())) {
+    for (const addr of addrs ?? []) {
+      if (addr.address.toLowerCase() === host) return true;
+    }
+  }
+  return false;
+}
+
+/** Ports of Pixel Agents servers registered on this machine, live or not.
+ *  Reading the registry rather than probing: a stale entry costs a false
+ *  positive on a port nobody is using, which is a far better failure than
+ *  opening sockets from a config command. */
+export function localServerPorts(): number[] {
+  const dir = path.join(os.homedir(), SERVER_JSON_DIR, SERVERS_DIR);
+  let files: string[];
+  try {
+    files = fs.readdirSync(dir).filter((f) => f.endsWith('.json'));
+  } catch {
+    return [];
+  }
+  const ports: number[] = [];
+  for (const file of files) {
+    try {
+      const entry = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf-8')) as unknown;
+      if (isRecord(entry) && Number.isSafeInteger(entry.port)) ports.push(entry.port as number);
+    } catch {
+      /* a malformed registry entry simply contributes no port */
+    }
+  }
+  return ports;
 }
