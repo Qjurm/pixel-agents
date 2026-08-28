@@ -434,8 +434,16 @@ async function main(): Promise<void> {
     if (isSharedBind && teamToken) {
       const lanHost = firstNonLoopbackAddress() ?? displayHost;
       console.log('  Shared office — colleagues join from their own machine with:\n');
+      // Deliberately NOT `npx pixel-agents`: that resolves to the published
+      // package, and a colleague whose copy predates team support would run a
+      // build with no --join at all. Whatever they launch this server with is
+      // by definition a copy that has it.
       console.log(
-        `    npx pixel-agents --join http://${lanHost}:${config.port} --token ${teamToken} --as <name>\n`,
+        `    pixel-agents --join http://${lanHost}:${config.port} --token ${teamToken} --as <name>\n`,
+      );
+      console.log(
+        '  Run that with the same pixel-agents build you started this server with —\n' +
+          '  a copy without team support has no --join.\n',
       );
       console.log(
         '  That token only accepts agent events. Keep the URL above (with ?token=) to\n' +
