@@ -713,6 +713,11 @@ export class OfficeState {
     if (parentCh) ch.dir = parentCh.dir;
     ch.isSubagent = true;
     ch.parentAgentId = parentAgentId;
+    // Wear the parent's name. A sub-agent has no identity of its own -- it is
+    // somebody's helper -- and an unlabelled character in a room full of
+    // labelled ones reads as a stranger who wandered in. In a shared office the
+    // useful question about a Subtask is whose it is.
+    ch.folderName = parentCh?.folderName;
     startMatrixEffect(ch, 'spawn');
     this.characters.set(id, ch);
 
