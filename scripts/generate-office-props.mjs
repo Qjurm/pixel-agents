@@ -33,6 +33,13 @@
  *     type entirely (assets/floors/, a 7-pattern grayscale strip recoloured by
  *     the HSBC sliders), not furniture -- and the editor can already recolour
  *     an existing pattern cool and pale for a washroom corner.
+ *   - Fruit bowl. At 1x1 a rimmed container with coloured lumps in it is the
+ *     BREAD_BASKET silhouette exactly; the office already has that sprite.
+ *   - Pedal bin. BIN exists. A pedal is two pixels.
+ *   - Integrated dishwasher, and a floor-standing oven. Both are the kitchen
+ *     counter's cupboard door with a control strip or a dark window on it --
+ *     the same sprite with different clutter. The microwave carries "there is
+ *     hot food here" on its own.
  *   - A bathroom partition. As floor furniture it is a flat slab two or three
  *     tiles wide with nothing on it, and it would z-sort in front of whoever
  *     stands behind it. Walls are already a first-class tool in the editor and
@@ -115,6 +122,11 @@ const C = {
   porcelainShade: [0xd3, 0xdb, 0xdd, 255],
   porcelainDim: [0xa9, 0xb4, 0xb8, 255],
   bowlDark: [0x46, 0x54, 0x59, 255],
+  // Oak worktop. Warmer than the bakery kraft above it and a shade browner:
+  // a worktop the colour of a paper bag looked like a desk had wandered in.
+  oak: [0xc4, 0x9d, 0x6b, 255],
+  oakLit: [0xdb, 0xba, 0x8d, 255],
+  oakDim: [0x8b, 0x67, 0x42, 255],
   // Mirror glass: cooler and lighter than any wall in the office, which is the
   // only reason a frame full of flat colour reads as a mirror at all.
   glass: [0xb8, 0xd2, 0xdb, 255],
@@ -1012,4 +1024,264 @@ function emitStates(id, name, canvases, footprintW, footprintH, opts = {}) {
   }
   c.rect(5, 3, 6, 1, C.steelLit); // a bright top edge, so it hangs off the wall
   emit('MIRROR', 'Mirror', c, 1, 2);
+}
+
+/**
+ * The shared body of a kitchen counter, so the plain run and the sink unit are
+ * literally the same shell and cannot drift apart.
+ *
+ * Tiling is the whole design constraint here. Every horizontal band runs the
+ * full 32px with no left or right outline, so two counters butt together
+ * without a doubled edge or a seam; all the detail is per-16px-tile, which
+ * means the door rhythm continues across the join instead of restarting. The
+ * cost is that a single counter has no end cap -- accepted deliberately, since
+ * a kitchen is a run and a run with hard ends cannot be extended.
+ */
+function counterShell(c) {
+  c.rect(0, 1, 32, 1, C.dark);
+  c.rect(0, 2, 32, 2, C.oakLit); // the back of the worktop catches the light
+  c.rect(0, 4, 32, 11, C.oak);
+  // Grain, sparse and horizontal. Anything denser turns the worktop into noise
+  // once a kettle and a toaster are standing on it.
+  for (const [x, y, w] of [
+    [3, 7, 7],
+    [18, 6, 9],
+    [11, 11, 6],
+    [23, 12, 6],
+    [2, 13, 5],
+  ]) {
+    c.rect(x, y, w, 1, C.oakDim);
+  }
+  c.rect(0, 15, 32, 2, C.oakDim); // the front edge of the slab
+  c.rect(0, 17, 32, 1, C.dark); // its shadow on the cupboard fronts
+  c.rect(0, 18, 32, 12, C.porcelainShade);
+  for (const t of [0, 1]) {
+    const x = t * 16 + 2;
+    c.rect(x, 19, 12, 10, C.dark);
+    c.rect(x + 1, 20, 10, 8, C.porcelain);
+    c.rect(x + 1, 26, 10, 2, C.porcelainShade);
+    // Handles meet at the middle of each pair, which is how a two-door unit
+    // actually looks -- and it keeps the rhythm symmetrical across a join.
+    c.rect(t === 0 ? x + 9 : x + 2, 22, 1, 4, C.steelDim);
+  }
+  c.rect(0, 30, 32, 1, C.dark); // recessed plinth
+  c.rect(0, 31, 32, 1, C.underShadow);
+}
+
+// ── Kitchen counter ───────────────────────────────────────────
+{
+  const c = new Canvas(32, 32);
+  counterShell(c);
+  // Category 'desks' is not a mistake: the engine derives isDesk from it, and
+  // isDesk is what lets a canPlaceOnSurfaces prop stand on top of something.
+  // A counter you cannot put the kettle on is a cupboard.
+  emit('KITCHEN_COUNTER', 'Kitchen Counter', c, 2, 2, {
+    category: 'desks',
+    backgroundTiles: 1,
+  });
+}
+
+// ── Kitchen counter with a sink ───────────────────────────────
+{
+  const c = new Canvas(32, 32);
+  counterShell(c);
+  // Worth its own asset next to WASHBASIN: that one is a pedestal basin stood
+  // on the floor of the washroom, seen face on. This is a bowl dropped into a
+  // worktop, seen from above, and it has to keep the counter's tiling edges.
+  // Nothing about the two sprites overlaps.
+  c.rect(5, 4, 22, 11, C.dark);
+  c.rect(6, 5, 20, 9, C.steel);
+  c.rect(6, 5, 20, 2, C.steelLit); // the near-vertical back wall of the bowl
+  c.rect(7, 10, 18, 3, C.steelDim); // and the shaded floor of it
+  c.rect(14, 9, 3, 2, C.bowlDark); // plughole
+  c.rect(15, 11, 1, 2, C.steelDim);
+  // Mixer tap, seen from behind: a pillar at the back edge with the spout
+  // reaching out over the bowl.
+  c.rect(15, 1, 2, 3, C.steelDim);
+  c.rect(12, 2, 4, 1, C.steel);
+  c.set(12, 3, C.steelLit);
+  // No draining grooves cut into the oak: dashes in the worktop are exactly
+  // what the wood grain already is, and the two were indistinguishable.
+  // The bowl runs wider instead, which is what a drainer-side sink looks like.
+  c.rect(20, 6, 5, 7, C.steelLit);
+  c.rect(20, 6, 5, 1, C.steel);
+  for (const y of [8, 10, 12]) c.rect(20, y, 5, 1, C.steel);
+  emit('KITCHEN_SINK', 'Kitchen Sink Counter', c, 2, 2, {
+    category: 'desks',
+    backgroundTiles: 1,
+  });
+}
+
+// ── Fridge ────────────────────────────────────────────────────
+{
+  const c = new Canvas(16, 32);
+  c.rect(1, 2, 14, 28, C.dark);
+  c.rect(2, 3, 12, 26, C.porcelain);
+  c.rect(12, 3, 2, 26, C.porcelainShade); // the rounded right-hand side
+  c.rect(2, 11, 12, 1, C.dark); // freezer over fridge
+  c.rect(2, 12, 12, 1, C.porcelainDim);
+  c.rect(11, 6, 1, 4, C.steelDim); // handles, both doors
+  c.rect(11, 15, 1, 9, C.steelDim);
+  // No on/off pair: a fridge that lights up would need its door open, and an
+  // open door is a different silhouette, not a state. Magnets carry the
+  // personality instead -- a bare white slab reads as a server cabinet.
+  c.rect(3, 5, 5, 5, C.paper); // a note held up by two of them
+  for (const [x, y] of [
+    [4, 6],
+    [4, 8],
+    [6, 7],
+  ]) {
+    c.rect(x, y, 2, 1, C.muted);
+  }
+  c.set(3, 5, C.coral);
+  c.set(7, 9, C.mint);
+  c.rect(4, 15, 2, 2, C.coral);
+  c.rect(8, 18, 2, 2, C.mint);
+  c.rect(3, 22, 3, 1, C.coralDim);
+  c.rect(2, 30, 12, 1, C.underShadow);
+  emit('FRIDGE', 'Fridge', c, 1, 2, { category: 'storage', backgroundTiles: 1 });
+}
+
+// ── Overhead cupboards ────────────────────────────────────────
+{
+  const c = new Canvas(32, 32);
+  // Same per-tile door rhythm and the same edgeless sides as the counter, so a
+  // run of cupboards tiles and lines up with the run of counters beneath it.
+  c.rect(0, 2, 32, 1, C.dark);
+  c.rect(0, 3, 32, 22, C.porcelainShade);
+  for (const t of [0, 1]) {
+    const x = t * 16 + 2;
+    c.rect(x, 4, 12, 18, C.dark);
+    c.rect(x + 1, 5, 10, 16, C.porcelain);
+    c.rect(x + 1, 17, 10, 4, C.porcelainShade);
+    // Handles along the bottom edge: that is where they are on a wall unit,
+    // and it stops the pair reading as two blank doors.
+    c.rect(x + 3, 19, 6, 1, C.steelDim);
+  }
+  c.rect(0, 25, 32, 1, C.oakDim); // the underside, seen from below
+  c.rect(0, 26, 32, 1, C.dark);
+  emit('WALL_CUPBOARDS', 'Overhead Cupboards', c, 2, 2);
+}
+
+// ── Microwave ─────────────────────────────────────────────────
+{
+  const c = new Canvas(16, 16);
+  c.rect(0, 4, 16, 11, C.dark);
+  c.rect(1, 5, 14, 9, C.graphite);
+  c.rect(1, 5, 14, 1, C.graphiteLit);
+  // Door window, with the mesh dotted in. A plain dark rectangle reads as a
+  // drawer; the mesh and the pale interior are what make it a window.
+  c.rect(2, 6, 8, 7, C.bowlDark);
+  c.rect(3, 7, 6, 5, C.graphiteLit);
+  for (let y = 7; y < 12; y++) {
+    for (let x = 3; x < 9; x++) if ((x + y) % 2 === 0) c.set(x, y, C.graphite);
+  }
+  c.rect(10, 7, 1, 5, C.steelLit); // handle
+  // Keypad and a display line.
+  c.rect(12, 7, 3, 1, C.paleMint);
+  for (const y of [9, 11]) {
+    for (const x of [12, 14]) c.set(x, y, C.steelDim);
+  }
+  c.set(13, 10, C.coralDim);
+  c.set(1, 15, C.darker);
+  c.set(14, 15, C.darker);
+  emit('MICROWAVE', 'Microwave', c, 1, 1, {
+    category: 'electronics',
+    canPlaceOnSurfaces: true,
+  });
+}
+
+// ── Kettle ────────────────────────────────────────────────────
+{
+  const c = new Canvas(16, 16);
+  const body = [
+    [5, 5, 10],
+    [6, 4, 11],
+    [7, 4, 11],
+    [8, 4, 11],
+    [9, 4, 11],
+    [10, 4, 11],
+    [11, 4, 11],
+    [12, 5, 10],
+  ];
+  c.spans(body, C.steelLit);
+  for (const [y, x0, x1] of body) {
+    c.set(x0, y, C.dark);
+    c.set(x1, y, C.steel);
+  }
+  c.rect(5, 4, 6, 1, C.steelDim); // lid
+  c.rect(7, 3, 2, 1, C.dark); // and its knob
+  // Spout and handle on opposite sides: the pair is the silhouette. Without
+  // both, a tapered steel drum is a bin.
+  c.spans(
+    [
+      [5, 2, 3],
+      [6, 1, 3],
+      [7, 1, 3],
+      [8, 2, 3],
+    ],
+    C.steel,
+  );
+  c.set(1, 5, C.steelLit); // the lip of the spout
+  c.rect(12, 6, 2, 1, C.dark);
+  c.rect(13, 7, 1, 4, C.dark);
+  c.rect(12, 11, 2, 1, C.dark);
+  c.rect(6, 8, 2, 3, C.glass); // water window
+  // The base in steelDim, not graphite: a near-black base vanished into the
+  // floor and left the power light floating under the kettle on its own.
+  c.rect(4, 13, 8, 2, C.steelDim);
+  c.rect(4, 15, 8, 1, C.dark);
+  c.set(8, 14, C.coral);
+  emit('KETTLE', 'Kettle', c, 1, 1, { category: 'misc', canPlaceOnSurfaces: true });
+}
+
+// ── Toaster ───────────────────────────────────────────────────
+{
+  const c = new Canvas(16, 16);
+  // Two slices standing proud of the slots, drawn first so the body overlaps
+  // their bottoms. The bread is what tells a chrome box from a radio.
+  for (const x of [3, 9]) {
+    c.rect(x, 2, 4, 4, C.kraftLit);
+    c.rect(x, 2, 4, 1, C.kraft);
+    c.rect(x + 1, 3, 2, 2, C.kraft);
+  }
+  c.rect(1, 5, 14, 2, C.steel);
+  c.rect(3, 5, 4, 1, C.darker); // the slots
+  c.rect(9, 5, 4, 1, C.darker);
+  c.rect(1, 7, 14, 7, C.dark);
+  c.rect(2, 8, 12, 5, C.steelLit);
+  c.rect(2, 11, 12, 2, C.steel);
+  c.rect(14, 8, 1, 3, C.dark); // lever
+  c.set(15, 8, C.dark);
+  c.set(3, 11, C.coralDim); // browning dial
+  c.set(2, 14, C.darker);
+  c.set(13, 14, C.darker);
+  emit('TOASTER', 'Toaster', c, 1, 1, { category: 'misc', canPlaceOnSurfaces: true });
+}
+
+// ── Dish rack ─────────────────────────────────────────────────
+{
+  const c = new Canvas(16, 16);
+  // Two plates on edge rather than three: at 2px wide with a gap they read as
+  // test tubes, and three of them filled the tile with stripes. Three pixels
+  // and a domed top is the narrowest a plate can be and still be a plate.
+  for (const x of [2, 6]) {
+    c.rect(x, 6, 3, 6, C.paleMint);
+    c.rect(x, 5, 3, 1, C.paper);
+    c.rect(x, 6, 1, 6, C.paper);
+    c.set(x, 5, C.none); // knock the corners off the dome
+    c.set(x + 2, 5, C.none);
+    c.rect(x, 12, 3, 1, C.mint);
+  }
+  // An upturned mug at the end, so the rack is not just a row of bars.
+  c.rect(10, 8, 4, 4, C.paper);
+  c.rect(10, 8, 4, 1, C.paleMint);
+  c.set(14, 9, C.paper);
+  c.set(14, 10, C.paper);
+  // Wire tray: a dark rim with the runners showing through.
+  c.rect(1, 13, 14, 2, C.steelDim);
+  c.rect(1, 12, 14, 1, C.steel);
+  for (const x of [3, 6, 9, 12]) c.set(x, 14, C.dark);
+  c.rect(1, 15, 14, 1, C.dark);
+  emit('DISH_RACK', 'Dish Rack', c, 1, 1, { category: 'misc', canPlaceOnSurfaces: true });
 }
