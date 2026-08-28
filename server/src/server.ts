@@ -72,6 +72,8 @@ export class PixelAgentsServer {
     host?: string;
     port?: number;
     staticDir?: string;
+    /** dist/ root, so the office can serve the joiner + hook script it shipped with. */
+    distRoot?: string;
     assetCache?: AssetCache;
     onSetHooksEnabled?: SetHooksEnabledSideEffect;
     onReloadAssets?: ReloadAssetsSideEffect;
@@ -111,6 +113,7 @@ export class PixelAgentsServer {
       store: store!,
       runtime: options?.runtime,
       staticDir: options?.staticDir,
+      distRoot: options?.distRoot,
       assetCache: options?.assetCache,
       onHookEvent: (providerId, event) => this.callback?.(providerId, event),
       onSetHooksEnabled: options?.onSetHooksEnabled,

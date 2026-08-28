@@ -39,7 +39,13 @@ describe('team hook ingress', () => {
     server.onHookEvent((_providerId, event) => {
       received.push(event);
     });
-    const config = await server.start({ embedded: false, store: new AgentStateStore() });
+    const config = await server.start({
+      embedded: false,
+      store: new AgentStateStore(),
+      // The joining routes only exist when the office knows where its own
+      // build lives -- that is what it hands out.
+      distRoot: path.join(__dirname, '..', '..', 'dist'),
+    });
     port = config.port;
     serverToken = config.token;
     teamToken = server.getTeamHostToken()!;
@@ -106,6 +112,28 @@ describe('team hook ingress', () => {
     const res = await post(teamToken, { [TEAM_USER_HEADER]: `bad${'x'.repeat(200)}` });
     expect(res.status).toBe(200);
     expect(received[0]![TEAM_EVENT_USER_FIELD]).toHaveLength(32);
+  });
+
+  it('hands out the TEAM token on the join route, never the server token', async () => {
+    // The whole point of two tokens. If the join instructions ever carried the
+    // server token, a one-command join would also hand every colleague the
+    // ability to rewrite this machine's ~/.claude/settings.json over /ws.
+    const res = await fetch(`http://127.0.0.1:${port.toString()}/join.sh`);
+    const body = await res.text();
+    expect(res.status).toBe(200);
+    expect(body).toContain(teamToken);
+    expect(body).not.toContain(serverToken);
+  });
+
+  it('serves the hook script and the joiner without a token at all', async () => {
+    // Reachability is the gate: a joiner has no credential yet, so demanding
+    // one here would make the one-command join impossible.
+    const script = await fetch(`http://127.0.0.1:${port.toString()}/api/hook-script`);
+    expect(script.status).toBe(200);
+    expect(await script.text()).toContain('hook_event_name');
+
+    const joiner = await fetch(`http://127.0.0.1:${port.toString()}/api/join.js`);
+    expect(joiner.status).toBe(200);
   });
 
   it('keeps the team token stable across a restart, so nobody is silently unjoined', async () => {

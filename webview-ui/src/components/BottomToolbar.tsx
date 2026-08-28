@@ -134,6 +134,18 @@ export function BottomToolbar({
       >
         Settings
       </Button>
+      {isBrowserRuntime && (
+        // Only in the browser: the office serves /join itself, and a VS Code
+        // webview has no window to open it in. It is a plain link rather than a
+        // modal because the page it opens is meant to be sent to a colleague.
+        <Button
+          variant="default"
+          onClick={() => window.open('/join', '_blank', 'noopener')}
+          title="How colleagues join this office"
+        >
+          Join
+        </Button>
+      )}
     </div>
   );
 }

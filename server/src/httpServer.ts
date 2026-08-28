@@ -4,6 +4,8 @@ import fastifyWebsocket from '@fastify/websocket';
 import * as crypto from 'crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import Fastify from 'fastify';
+import { promises as fs } from 'fs';
+import * as path from 'path';
 
 import { displayNameFor } from './activityMask.js';
 import type { AgentRuntime } from './agentRuntime.js';
@@ -23,7 +25,12 @@ import {
   WS_CLOSE_UNAUTHORIZED,
 } from './constants.js';
 import { hostLabel } from './hostLabel.js';
+import { joinPageHtml } from './joinPage.js';
+import { CLAUDE_HOOK_SCRIPT_NAME as CLAUDE_HOOK_SCRIPT_FILE } from './providers/hook/claude/constants.js';
 import { sanitizeUserLabel } from './teamConfig.js';
+
+/** Name of the joiner bundle inside dist/. */
+const JOINER_FILE = 'join.js';
 import type { AgentState } from './types.js';
 
 /** Options for creating the HTTP + WebSocket server. */
@@ -45,6 +52,9 @@ export interface HttpServerOptions {
   runtime?: AgentRuntime;
   /** Path to SPA dist directory for static serving (standalone only) */
   staticDir?: string;
+  /** dist/ root, so the office can hand out the joiner and the hook script it
+   *  was built with. Omitted = the joining routes are not registered. */
+  distRoot?: string;
   /** Cached assets loaded at startup (standalone only) */
   assetCache?: AssetCache;
   /** Callback when a hook event is received */
@@ -93,6 +103,7 @@ export async function createHttpServer(options: HttpServerOptions): Promise<Http
   // ── Routes ──────────────────────────────────────────────────
 
   registerHealthRoute(app);
+  registerJoinRoutes(app, options);
   registerHookRoute(app, options);
   registerWebSocketRoute(app, options);
 
@@ -157,6 +168,78 @@ function registerHookRoute(app: FastifyInstance, options: HttpServerOptions): vo
       reply.send('ok');
     },
   );
+}
+
+// ── Joining ────────────────────────────────────────────────────
+
+/**
+ * The three things a colleague's machine needs, served by the office itself.
+ *
+ * These routes are deliberately UNAUTHENTICATED, and reachability is the whole
+ * gate: an office bound to loopback can only be joined from the machine it runs
+ * on, and one bound to the network can be joined by anyone who can already open
+ * its page. That is the trade a one-command join is made of. It also means the
+ * team token is handed to anyone who asks -- which is exactly why the team
+ * token exists separately from the server token, and cannot approve anything.
+ *
+ * Serving the hook script from here is what ends the "everybody re-pull after
+ * an update" problem: members fetch the office's current script, not a copy
+ * they cloned once.
+ */
+function registerJoinRoutes(app: FastifyInstance, options: HttpServerOptions): void {
+  const { distRoot, teamToken } = options;
+  if (!distRoot || !teamToken) return;
+
+  /** The address this caller actually reached us on. The server cannot know it
+   *  any other way -- it may be behind a proxy, on any of several interfaces,
+   *  or addressed by a name that resolves here. Host is caller-supplied, but it
+   *  only ever shapes a URL echoed back to that same caller. */
+  const officeUrl = (request: FastifyRequest): string => {
+    const host = request.headers.host ?? '127.0.0.1';
+    return `http://${host}`;
+  };
+
+  app.get('/api/hook-script', async (_request, reply) => {
+    const file = path.join(distRoot, 'hooks', CLAUDE_HOOK_SCRIPT_FILE);
+    try {
+      const body = await fs.readFile(file, 'utf-8');
+      reply.type('text/javascript; charset=utf-8').send(body);
+    } catch {
+      reply.code(503).send('hook script not built');
+    }
+  });
+
+  app.get('/api/join.js', async (_request, reply) => {
+    const file = path.join(distRoot, JOINER_FILE);
+    try {
+      const body = await fs.readFile(file, 'utf-8');
+      reply.type('text/javascript; charset=utf-8').send(body);
+    } catch {
+      reply.code(503).send('joiner not built');
+    }
+  });
+
+  app.get('/join.sh', async (request, reply) => {
+    const url = officeUrl(request);
+    reply
+      .type('text/plain; charset=utf-8')
+      .send(
+        [
+          '#!/bin/sh',
+          '# Join this Pixel Agents office. Downloads the joiner, runs it, cleans up.',
+          'set -e',
+          'TMP="$(mktemp -t pixel-agents-join)"',
+          `curl -fsSL "${url}/api/join.js" -o "$TMP"`,
+          `node "$TMP" "${url}/?token=${teamToken}" "$@"`,
+          'rm -f "$TMP"',
+          '',
+        ].join('\n'),
+      );
+  });
+
+  app.get('/join', async (request, reply) => {
+    reply.type('text/html; charset=utf-8').send(joinPageHtml(officeUrl(request), teamToken));
+  });
 }
 
 // ── WebSocket ──────────────────────────────────────────────────

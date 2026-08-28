@@ -446,6 +446,7 @@ async function main(): Promise<void> {
       host: args.host,
       port: args.port,
       staticDir,
+      distRoot,
       assetCache,
       onSetHooksEnabled,
       onReloadAssets,

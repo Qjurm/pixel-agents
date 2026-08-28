@@ -63,6 +63,30 @@ function buildHooks() {
 }
 
 /**
+ * The joiner (dist/join.js). Its own bundle rather than a mode of the CLI,
+ * because the office SERVES this file to machines that have nothing installed:
+ * it must not drag in Fastify or anything else resolved from node_modules at
+ * runtime, which the CLI bundle does.
+ */
+function buildJoiner() {
+  const entry = path.join(__dirname, 'server', 'src', 'join.ts');
+  if (!fs.existsSync(entry)) return;
+  require('esbuild').buildSync({
+    entryPoints: [entry],
+    bundle: true,
+    platform: 'node',
+    target: 'node18',
+    format: 'cjs',
+    outfile: path.join(__dirname, 'dist', 'join.js'),
+    banner: { js: '#!/usr/bin/env node' },
+    define: {
+      'process.env.PIXEL_AGENTS_VERSION': JSON.stringify(require('./package.json').version),
+    },
+  });
+  console.log('✓ Built join → dist/join.js');
+}
+
+/**
  * @type {import('esbuild').Plugin}
  */
 const esbuildProblemMatcherPlugin = {
@@ -108,6 +132,7 @@ async function main() {
     // Copy assets and hooks after build
     copyAssets();
     buildHooks();
+    buildJoiner();
     await buildCli();
     await buildUninstall();
   }

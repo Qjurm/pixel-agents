@@ -38,7 +38,10 @@ export default [
     },
   },
   {
-    files: ['adapters/vscode/constants.ts'],
+    // The designated homes for colour literals: everywhere else must reference
+    // these. brandPalette.ts holds CODE14's palette, read by both the asset
+    // generator and the server-rendered join page.
+    files: ['adapters/vscode/constants.ts', 'server/src/brandPalette.ts'],
     rules: {
       'pixel-agents/no-inline-colors': 'off',
     },
