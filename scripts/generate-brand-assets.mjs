@@ -13,10 +13,10 @@
  * dist/assets/ and the server then serves to every office viewer.
  */
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { deflateSync } from 'node:zlib';
+import { deflateSync, inflateSync } from 'node:zlib';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const FURNITURE = join(ROOT, 'webview-ui', 'public', 'assets', 'furniture');
@@ -47,6 +47,24 @@ const C = {
   steel: [0x9b, 0xa3, 0xa6, 255],
   steelDim: [0x6b, 0x74, 0x78, 255],
   graphite: [0x32, 0x38, 0x3b, 255],
+  /* Sampled straight out of the bundled DESK/DESK_FRONT.png. MACBOOK_DESK has
+   * to look like the same furniture line standing next to it, so these are
+   * matched rather than invented -- a second wood tone would read as a
+   * different desk that happens to be the same shape. */
+  /* A white sit-stand desk, the kind actually standing in the office. Kept as
+   * four near-whites rather than one: at this size the only thing separating a
+   * white slab from a white wall is the edge shading. */
+  white: [0xf4, 0xf5, 0xf6, 255],
+  whiteLit: [0xff, 0xff, 0xff, 255],
+  whiteEdge: [0xd3, 0xd8, 0xdb, 255],
+  whiteShadow: [0xa8, 0xaf, 0xb4, 255],
+  wood: [0xb3, 0x88, 0x57, 255],
+  woodLit: [0xcf, 0xa8, 0x6d, 255],
+  woodEdge: [0x88, 0x5c, 0x47, 255],
+  woodShadow: [0x53, 0x2e, 0x3d, 255],
+  legDark: [0x39, 0x44, 0x49, 255],
+  legLit: [0x73, 0x78, 0x7e, 255],
+  underDesk: [0x00, 0x00, 0x00, 255],
 };
 
 /** 5x7 glyphs -- only the characters the wordmark needs. */
@@ -111,6 +129,63 @@ const TINY = {
   },
 };
 
+/**
+ * Read one of the bundled PNGs back in.
+ *
+ * MACBOOK_DESK is composited straight onto the project's own DESK_FRONT rather
+ * than redrawing a desk beside it. A hand-drawn copy would drift: one pixel of
+ * difference in the desk plane and the new workstation no longer lines up with
+ * the desks already in the office. Reading the real sprite makes that
+ * impossible, and means a future change to DESK_FRONT is picked up by a re-run.
+ */
+function readPng(file) {
+  const d = readFileSync(file);
+  let pos = 8;
+  let w = 0;
+  let h = 0;
+  const idat = [];
+  while (pos < d.length) {
+    const len = d.readUInt32BE(pos);
+    const type = d.toString('ascii', pos + 4, pos + 8);
+    if (type === 'IHDR') {
+      w = d.readUInt32BE(pos + 8);
+      h = d.readUInt32BE(pos + 12);
+    } else if (type === 'IDAT') {
+      idat.push(d.subarray(pos + 8, pos + 8 + len));
+    }
+    pos += 12 + len;
+  }
+  const raw = inflateSync(Buffer.concat(idat));
+  const stride = w * 4;
+  const px = new Uint8Array(w * h * 4);
+  let prev = new Uint8Array(stride);
+  for (let y = 0, i = 0; y < h; y++) {
+    const filter = raw[i++];
+    const line = new Uint8Array(raw.subarray(i, i + stride));
+    i += stride;
+    // All five filter types: the bundled art is not written unfiltered the way
+    // this generator writes its own output.
+    for (let x = 0; x < stride; x++) {
+      const a = x >= 4 ? line[x - 4] : 0;
+      const b = prev[x];
+      const c = x >= 4 ? prev[x - 4] : 0;
+      if (filter === 1) line[x] = (line[x] + a) & 255;
+      else if (filter === 2) line[x] = (line[x] + b) & 255;
+      else if (filter === 3) line[x] = (line[x] + ((a + b) >> 1)) & 255;
+      else if (filter === 4) {
+        const p = a + b - c;
+        const pa = Math.abs(p - a);
+        const pb = Math.abs(p - b);
+        const pc = Math.abs(p - c);
+        line[x] = (line[x] + (pa <= pb && pa <= pc ? a : pb <= pc ? b : c)) & 255;
+      }
+    }
+    px.set(line, y * stride);
+    prev = line;
+  }
+  return { w, h, px };
+}
+
 class Canvas {
   constructor(w, h) {
     this.w = w;
@@ -125,6 +200,18 @@ class Canvas {
     this.px[o + 1] = rgba[1];
     this.px[o + 2] = rgba[2];
     this.px[o + 3] = rgba[3];
+  }
+
+  /** Paint another image in, keeping this canvas's pixels where the source is
+   *  transparent. Used to stand a prop on top of a bundled sprite. */
+  blit(src, x = 0, y = 0) {
+    for (let sy = 0; sy < src.h; sy++) {
+      for (let sx = 0; sx < src.w; sx++) {
+        const o = (sy * src.w + sx) * 4;
+        if (src.px[o + 3] < 8) continue;
+        this.set(x + sx, y + sy, [src.px[o], src.px[o + 1], src.px[o + 2], src.px[o + 3]]);
+      }
+    }
   }
 
   rect(x, y, w, h, rgba) {
@@ -569,6 +656,39 @@ function codeLines(c, x0, y0, x1, y1) {
   }
 }
 
+/**
+ * Draw an open MacBook with its lid's top-left corner at (lx, ly).
+ *
+ * Shared rather than copied because the standalone laptop and the one bolted to
+ * MACBOOK_DESK have to be the same machine -- two hand-tuned copies would drift
+ * apart the first time either is nudged, and the pair sits side by side in the
+ * same office where any size difference is obvious.
+ */
+function drawMacbook(c, lx, ly, lit) {
+  // Lid: a thin dark bezel, which is most of what separates a current laptop
+  // from the CRT next to it.
+  c.rect(lx, ly, 14, 11, C.graphite);
+  if (lit) {
+    codeLines(c, lx + 1, ly + 1, lx + 12, ly + 8);
+  } else {
+    c.rect(lx + 1, ly + 1, 12, 8, C.darker);
+    c.rect(lx + 1, ly + 1, 12, 1, C.steelDim); // one sheen row, so it is off, not a hole
+  }
+  c.rect(lx + 1, ly + 11, 12, 1, C.steelDim); // hinge
+  // The deck is drawn wider than the lid on purpose. Without that overhang the
+  // two stack into one silhouette and the whole thing reads as a small monitor
+  // on a stand, which is exactly what the first attempt looked like.
+  c.rect(lx - 1, ly + 12, 16, 4, C.steel);
+  c.rect(lx - 1, ly + 16, 16, 1, C.steelLit); // front lip catching the light
+  // Individual key pixels rather than a solid well: a filled rectangle here
+  // reads as a shadow, and the key texture is what names the object.
+  for (let x = lx + 1; x <= lx + 12; x += 2) {
+    c.rect(x, ly + 12, 1, 1, C.graphite);
+    c.rect(x, ly + 13, 1, 1, C.graphite);
+  }
+  c.rect(lx + 5, ly + 15, 4, 1, C.steelDim); // trackpad
+}
+
 // ── An open MacBook, to sit beside the beige boxes ───────────
 // The bundled PC fills rows 0..22 of its 16x32 sprite, with the desk plane at
 // row 17. Everything below matches that plane so the new kit shares an eye-line
@@ -576,31 +696,129 @@ function codeLines(c, x0, y0, x1, y1) {
 {
   const build = (lit) => {
     const c = new Canvas(16, 32);
-    // Lid: a thin dark bezel, which is most of what separates a current laptop
-    // from the CRT next to it.
-    c.rect(1, 6, 14, 11, C.graphite);
-    if (lit) {
-      codeLines(c, 2, 7, 13, 14);
-    } else {
-      c.rect(2, 7, 12, 8, C.darker);
-      c.rect(2, 7, 12, 1, C.steelDim); // one sheen row, so it is off, not a hole
-    }
-    c.rect(2, 17, 12, 1, C.steelDim); // hinge
-    // The deck is drawn wider than the lid on purpose. Without that overhang
-    // the two stack into one silhouette and the whole thing reads as a small
-    // monitor on a stand, which is exactly what the first attempt looked like.
-    c.rect(0, 18, 16, 4, C.steel);
-    c.rect(0, 22, 16, 1, C.steelLit); // front lip catching the light
-    // Individual key pixels rather than a solid well: a filled rectangle here
-    // reads as a shadow, and the key texture is what names the object.
-    for (let x = 2; x <= 13; x += 2) {
-      c.rect(x, 18, 1, 1, C.graphite);
-      c.rect(x, 19, 1, 1, C.graphite);
-    }
-    c.rect(6, 21, 4, 1, C.steelDim); // trackpad
+    drawMacbook(c, 1, 6, lit);
     return c;
   };
   emitStates('MACBOOK', 'MacBook', { off: build(false), on: build(true) }, 1, 2);
+}
+
+/**
+ * A laptop small enough to stand on a desk, drawn with its deck bottom at row
+ * 13 so it lands on the desk plane that starts at row 11.
+ *
+ * Deliberately smaller than the standalone MACBOOK sprite: that one owns a
+ * whole tile and is seventeen rows tall, which would make it the size of a
+ * wardrobe on a three-tile desk. Shared by both desk variants so the wooden and
+ * the white workstation carry the same machine.
+ */
+function drawDeskLaptop(c, x, lit) {
+  // Lid: graphite shell, screen inset by one pixel all round.
+  c.rect(x + 1, 1, 12, 9, C.graphite);
+  if (lit) {
+    codeLines(c, x + 2, 2, x + 11, 8);
+  } else {
+    c.rect(x + 2, 2, 10, 7, C.darker);
+    c.rect(x + 2, 2, 10, 1, C.steelDim); // a sheen row, so it reads off and not hollow
+  }
+  c.rect(x + 1, 10, 12, 1, C.steelDim); // hinge
+  // The deck overhangs the lid on both sides. Without that the lid and deck
+  // stack into one silhouette and the whole thing reads as a tiny monitor.
+  c.rect(x, 11, 14, 2, C.steel);
+  c.rect(x, 13, 14, 1, C.steelLit); // front lip catching the light
+  for (let kx = x + 2; kx <= x + 11; kx += 2) c.rect(kx, 11, 1, 1, C.graphite);
+  c.rect(x + 5, 12, 4, 1, C.steelDim); // trackpad
+}
+
+// ── A desk with a MacBook on it: somewhere to actually sit ───
+// A workstation in one piece. The desk is the project's own DESK_FRONT,
+// composited rather than redrawn, so the plane and silhouette match the desks
+// already in the office exactly.
+//
+// Two things make this function rather than merely look right. `category:
+// "desks"` is what assetLoader turns into `isDesk`, which is what makes
+// characters treat it as a workstation and chairs orient toward it. And the
+// off/on pair is what officeState's rebuildFurnitureInstances swaps when
+// somebody sits facing it -- that logic keys on the state group, not on the
+// category, so a desk lights up just as an electronics item does.
+{
+  const desk = readPng(join(FURNITURE, 'DESK', 'DESK_FRONT.png'));
+
+  const build = (lit) => {
+    const c = new Canvas(48, 32);
+    c.blit(desk);
+    // Centred on the desk, the deck overlapping its surface by a pixel so the
+    // laptop sits ON the wood rather than hovering a hair above it.
+    drawDeskLaptop(c, 17, lit);
+    return c;
+  };
+
+  emitStates('MACBOOK_DESK', 'MacBook Desk', { off: build(false), on: build(true) }, 3, 2, {
+    category: 'desks',
+    canPlaceOnSurfaces: false,
+    backgroundTiles: 1,
+  });
+}
+
+// ── White sit-stand desks ────────────────────────────────────
+// The office runs on white height-adjustable desks with T-feet, not the wooden
+// one the project ships. Drawn rather than recoloured: the bundled desk is a
+// closed box with a solid front, and the thing that actually names this desk is
+// the gap under the top and the shape of the legs.
+//
+// Geometry is locked to DESK_FRONT: top surface starting at row 11, sprite
+// bottom at row 31. Anything else and these would not line up beside the wooden
+// desks or under the chairs.
+{
+  const drawWhiteDesk = (c) => {
+    // Top slab, lit along its back edge so it reads as a surface and not a wall.
+    c.rect(2, 11, 44, 1, C.whiteLit);
+    c.rect(2, 12, 44, 3, C.white);
+    c.rect(2, 15, 44, 1, C.whiteEdge);
+    // A one-pixel shadow directly beneath the slab gives it thickness.
+    c.rect(3, 16, 42, 1, C.whiteShadow);
+
+    // Two T-legs. The space between them is left transparent on purpose: an
+    // open underside is most of what distinguishes this from the boxed-in
+    // wooden desk at a glance.
+    for (const x of [9, 34]) {
+      c.rect(x, 17, 4, 12, C.white);
+      c.rect(x + 3, 17, 1, 12, C.whiteEdge); // right-hand edge catches shade
+      // Foot: a wide flat bar, wider than the post, as on the real frame.
+      c.rect(x - 3, 29, 10, 2, C.white);
+      c.rect(x - 3, 31, 10, 1, C.whiteShadow);
+    }
+  };
+
+  {
+    const c = new Canvas(48, 32);
+    drawWhiteDesk(c);
+    emit('WHITE_DESK', 'White Desk', c, 3, 2, {
+      category: 'desks',
+      canPlaceOnWalls: false,
+      canPlaceOnSurfaces: false,
+      backgroundTiles: 1,
+    });
+  }
+
+  // The same desk with a laptop on it, so one piece is a whole workstation.
+  const build = (lit) => {
+    const c = new Canvas(48, 32);
+    drawWhiteDesk(c);
+    drawDeskLaptop(c, 17, lit);
+    return c;
+  };
+  emitStates(
+    'WHITE_DESK_MACBOOK',
+    'White Desk with MacBook',
+    { off: build(false), on: build(true) },
+    3,
+    2,
+    {
+      category: 'desks',
+      canPlaceOnSurfaces: false,
+      backgroundTiles: 1,
+    },
+  );
 }
 
 // A closed MacBook was tried here and dropped. At 16px a shut laptop is a grey

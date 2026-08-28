@@ -146,6 +146,15 @@ export function BottomToolbar({
           Join
         </Button>
       )}
+      {isBrowserRuntime && (
+        <Button
+          variant="default"
+          onClick={() => window.open('/scores', '_blank', 'noopener')}
+          title="Who has burned the most tokens"
+        >
+          Scores
+        </Button>
+      )}
     </div>
   );
 }

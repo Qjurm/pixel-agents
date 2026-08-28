@@ -28,7 +28,15 @@ import {
 import { hostLabel } from './hostLabel.js';
 import { joinPageHtml } from './joinPage.js';
 import { CLAUDE_HOOK_SCRIPT_NAME as CLAUDE_HOOK_SCRIPT_FILE } from './providers/hook/claude/constants.js';
+import { scoresPageHtml } from './scoresPage.js';
 import { sanitizeUserLabel } from './teamConfig.js';
+
+/** Everything the scores routes need. Kept as a structural type rather than
+ *  importing the class, so the HTTP layer stays a consumer of the scoreboard
+ *  and not its owner. */
+export interface LeaderboardSource {
+  standings(): { user: string; tokens: number; turns: number }[];
+}
 
 /** Name of the joiner bundle inside dist/. */
 const JOINER_FILE = 'join.js';
@@ -56,6 +64,8 @@ export interface HttpServerOptions {
   /** dist/ root, so the office can hand out the joiner and the hook script it
    *  was built with. Omitted = the joining routes are not registered. */
   distRoot?: string;
+  /** Token scoreboard. Omitted = the scores routes are not registered. */
+  leaderboard?: LeaderboardSource;
   /** Cached assets loaded at startup (standalone only) */
   assetCache?: AssetCache;
   /** Callback when a hook event is received */
@@ -105,6 +115,7 @@ export async function createHttpServer(options: HttpServerOptions): Promise<Http
 
   registerHealthRoute(app);
   registerJoinRoutes(app, options);
+  registerScoreRoutes(app, options);
   registerHookRoute(app, options);
   registerWebSocketRoute(app, options);
 
@@ -240,6 +251,32 @@ function registerJoinRoutes(app: FastifyInstance, options: HttpServerOptions): v
 
   app.get('/join', async (request, reply) => {
     reply.type('text/html; charset=utf-8').send(joinPageHtml(officeUrl(request), teamToken));
+  });
+}
+
+// ── Scores ─────────────────────────────────────────────────────
+
+/**
+ * The scoreboard, as a page and as JSON.
+ *
+ * Served over HTTP rather than pushed down the WebSocket on purpose: the wire
+ * protocol is an AsyncAPI contract with generated bindings and a CI drift
+ * check, and a scoreboard nobody polls more than once a minute does not earn a
+ * new message type in it. A page also means a colleague can be sent a link.
+ *
+ * Unauthenticated, like the joining routes: it contains names and integers,
+ * which is strictly less than the office already shows anyone who opens it.
+ */
+function registerScoreRoutes(app: FastifyInstance, options: HttpServerOptions): void {
+  const { leaderboard } = options;
+  if (!leaderboard) return;
+
+  app.get('/api/leaderboard', async (_request, reply) => {
+    reply.send({ entries: leaderboard.standings() });
+  });
+
+  app.get('/scores', async (_request, reply) => {
+    reply.type('text/html; charset=utf-8').send(scoresPageHtml(leaderboard.standings()));
   });
 }
 

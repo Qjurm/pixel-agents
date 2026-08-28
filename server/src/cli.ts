@@ -27,8 +27,17 @@ import {
   readConfig,
   setHooksEnabled,
 } from './configPersistence.js';
-import { MAX_PORT, MIN_PORT } from './constants.js';
+import {
+  LEADERBOARD_SAVE_INTERVAL_MS,
+  MAX_PORT,
+  MIN_PORT,
+  TEAM_EVENT_USER_FIELD,
+  TURN_ID_FIELD,
+  TURN_TOKENS_FIELD,
+} from './constants.js';
 import { FileStateAdapter } from './fileStateAdapter.js';
+import { hostLabel } from './hostLabel.js';
+import { Leaderboard } from './leaderboard.js';
 import { claudeProvider, copyHookScript, hookProviderById } from './providers/index.js';
 import { PixelAgentsServer } from './server.js';
 import {
@@ -333,6 +342,13 @@ async function main(): Promise<void> {
   // External asset directories are merged at startup too, so directories added
   // in a previous session survive a restart. buildAssetCache is the shared
   // loader used by both the standalone server and the VS Code adapter.
+  // Loaded from disk here rather than inside the server, so a restart keeps the
+  // scoreboard and the office does not have to own its lifetime.
+  const leaderboard = new Leaderboard();
+  const leaderboardTimer = setInterval(() => leaderboard.persist(), LEADERBOARD_SAVE_INTERVAL_MS);
+  leaderboardTimer.unref();
+  process.on('exit', () => leaderboard.persist());
+
   console.log('[Pixel Agents] Loading assets...');
   const assetCache: AssetCache = await buildAssetCache(
     distRoot,
@@ -359,6 +375,18 @@ async function main(): Promise<void> {
 
     // Wire hook events: HTTP POST -> runtime -> hookEventHandler -> agents
     server.onHookEvent((providerId, event) => {
+      // Score first, then dispatch. The turn count rides along on the event
+      // that reports a finished turn (turnTokens.ts computes it on the machine
+      // that owns the transcript, because the office cannot see a teammate's).
+      const reporter = event[TEAM_EVENT_USER_FIELD];
+      const tokens = event[TURN_TOKENS_FIELD];
+      const turnId = event[TURN_ID_FIELD];
+      if (typeof tokens === 'number' && typeof turnId === 'string') {
+        // An unlabelled event came over loopback from this machine's own
+        // Claude, so it scores under the host's own name.
+        const user = typeof reporter === 'string' && reporter ? reporter : hostLabel();
+        leaderboard.record(user, turnId, tokens);
+      }
       runtime.handleHookEvent(providerId, event);
     });
 
@@ -447,6 +475,7 @@ async function main(): Promise<void> {
       port: args.port,
       staticDir,
       distRoot,
+      leaderboard,
       assetCache,
       onSetHooksEnabled,
       onReloadAssets,

@@ -11,11 +11,14 @@ import {
   SERVERS_DIR,
   TEAM_POST_TIMEOUT_MS,
   TEAM_USER_HEADER,
+  TURN_ID_FIELD,
+  TURN_TOKENS_FIELD,
 } from '../../../../constants.js';
 import type { ServerConfig, ServerTarget } from '../../../../serverConfig.js';
 import { isServerConfig, isServerTarget } from '../../../../serverConfig.js';
 import type { TeamServer } from '../../../../teamConfig.js';
 import { readTeamServers } from '../../../../teamConfig.js';
+import { readTurnTokens } from '../../../../turnTokens.js';
 
 const SERVER_JSON = path.join(os.homedir(), SERVER_JSON_DIR, SERVER_JSON_NAME);
 const SERVERS_REGISTRY_DIR = path.join(os.homedir(), SERVER_JSON_DIR, SERVERS_DIR);
@@ -245,6 +248,17 @@ async function main(): Promise<void> {
   hookDebug(
     `fan-out event=${eventName} sid=${sid} local=${servers.length} team=${teamServers.length}`,
   );
+
+  // A finished turn is the only moment the transcript holds a complete usage
+  // block, and the only event worth paying a file read for. Everything else
+  // fires many times per turn.
+  if (eventName === 'Stop' && typeof data.transcript_path === 'string') {
+    const turn = readTurnTokens(data.transcript_path);
+    if (turn) {
+      data[TURN_TOKENS_FIELD] = turn.tokens;
+      data[TURN_ID_FIELD] = turn.turnId;
+    }
+  }
 
   // One payload for every destination. The office decides what is shown --
   // masking lives there now, so a machine on an older build cannot make the

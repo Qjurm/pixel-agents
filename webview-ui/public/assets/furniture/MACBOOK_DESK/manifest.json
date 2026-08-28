@@ -1,0 +1,32 @@
+{
+  "id": "MACBOOK_DESK",
+  "name": "MacBook Desk",
+  "category": "desks",
+  "type": "group",
+  "groupType": "state",
+  "canPlaceOnWalls": false,
+  "canPlaceOnSurfaces": false,
+  "backgroundTiles": 1,
+  "members": [
+    {
+      "type": "asset",
+      "id": "MACBOOK_DESK_OFF",
+      "file": "MACBOOK_DESK_OFF.png",
+      "width": 48,
+      "height": 32,
+      "footprintW": 3,
+      "footprintH": 2,
+      "state": "off"
+    },
+    {
+      "type": "asset",
+      "id": "MACBOOK_DESK_ON",
+      "file": "MACBOOK_DESK_ON.png",
+      "width": 48,
+      "height": 32,
+      "footprintW": 3,
+      "footprintH": 2,
+      "state": "on"
+    }
+  ]
+}

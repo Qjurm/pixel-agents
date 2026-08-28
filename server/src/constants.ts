@@ -146,6 +146,17 @@ export const TEAM_EVENT_USER_FIELD = '__pixelAgentsTeamUser';
 export const REMOTE_PRESENCE_TIMEOUT_MS = 900_000; // 15 minutes
 /** How often to sweep for teammates who stopped reporting. */
 export const REMOTE_PRESENCE_CHECK_INTERVAL_MS = 60_000; // 1 minute
+/** Fields a hook event may carry reporting the tokens one finished turn cost.
+ *  Computed on the machine that owns the transcript -- the office cannot see a
+ *  teammate's -- and deliberately just an integer plus an id to deduplicate it. */
+export const TURN_TOKENS_FIELD = '__pixelAgentsTurnTokens';
+/** File (under SERVER_JSON_DIR) holding the token scoreboard. */
+export const LEADERBOARD_FILE_NAME = 'leaderboard.json';
+/** How often the scoreboard is flushed to disk. Long, because it is only
+ *  written when it changed and losing the last few turns to a hard kill costs
+ *  nothing anyone will notice. */
+export const LEADERBOARD_SAVE_INTERVAL_MS = 30_000;
+export const TURN_ID_FIELD = '__pixelAgentsTurnId';
 /** Marker on a broadcast naming the connection that caused it, so that
  *  connection can skip its own echo. Stripped before the message is sent, so
  *  it never reaches a client and needs no place in the AsyncAPI contract. */

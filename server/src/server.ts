@@ -17,6 +17,7 @@ import {
   SERVER_REGISTRY_PROTOCOL_VERSION,
   SERVERS_DIR,
 } from './constants.js';
+import type { LeaderboardSource } from './httpServer.js';
 import { createHttpServer } from './httpServer.js';
 import type { ServerConfig } from './serverConfig.js';
 import { isServerConfig, isServerTarget } from './serverConfig.js';
@@ -74,6 +75,8 @@ export class PixelAgentsServer {
     staticDir?: string;
     /** dist/ root, so the office can serve the joiner + hook script it shipped with. */
     distRoot?: string;
+    /** Token scoreboard, exposed read-only over HTTP. */
+    leaderboard?: LeaderboardSource;
     assetCache?: AssetCache;
     onSetHooksEnabled?: SetHooksEnabledSideEffect;
     onReloadAssets?: ReloadAssetsSideEffect;
@@ -114,6 +117,7 @@ export class PixelAgentsServer {
       runtime: options?.runtime,
       staticDir: options?.staticDir,
       distRoot: options?.distRoot,
+      leaderboard: options?.leaderboard,
       assetCache: options?.assetCache,
       onHookEvent: (providerId, event) => this.callback?.(providerId, event),
       onSetHooksEnabled: options?.onSetHooksEnabled,
