@@ -1587,6 +1587,11 @@ export function startStaleExternalAgentCheck(
 
     for (const [id, agent] of agents) {
       if (!agent.isExternal) continue;
+      // An agent with no transcript of its own -- a hooks-only provider, or a
+      // teammate reporting from another machine -- cannot be judged by this
+      // rule. statSync('') throws, which would read as "file deleted" and
+      // despawn every one of them on the next tick.
+      if (!agent.jsonlFile) continue;
 
       // Only despawn if the JSONL file has been deleted from disk.
       // Inactive external agents stay alive so they can resume when
