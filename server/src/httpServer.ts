@@ -16,9 +16,12 @@ import { handleClientMessage } from './clientMessageHandler.js';
 import {
   HOOK_API_PREFIX,
   MAX_HOOK_BODY_SIZE,
+  TEAM_EVENT_USER_FIELD,
+  TEAM_USER_HEADER,
   WS_CLOSE_FORBIDDEN_ORIGIN,
   WS_CLOSE_UNAUTHORIZED,
 } from './constants.js';
+import { sanitizeUserLabel } from './teamConfig.js';
 import type { AgentState } from './types.js';
 
 /** Options for creating the HTTP + WebSocket server. */
@@ -31,6 +34,9 @@ export interface HttpServerOptions {
   port?: number;
   /** Bearer auth token for hook and WebSocket endpoints */
   token: string;
+  /** Lower-privilege token accepted ONLY on the hook route, for teammates
+   *  reporting agents into a shared office. Omitted = no team ingress. */
+  teamToken?: string;
   /** AgentStateStore for WebSocket broadcast piping */
   store: AgentStateStore;
   /** Shared agent lifecycle core (for toggle side effects + standalone restore). Optional in embedded mode. */
@@ -116,7 +122,7 @@ function registerHookRoute(app: FastifyInstance, options: HttpServerOptions): vo
   }>(
     `${HOOK_API_PREFIX}/:providerId`,
     {
-      preHandler: bearerAuth(options.token),
+      preHandler: bearerAuth(options.token, options.teamToken),
       schema: {
         params: {
           type: 'object',
@@ -130,6 +136,17 @@ function registerHookRoute(app: FastifyInstance, options: HttpServerOptions): vo
     async (request, reply) => {
       const { providerId } = request.params;
       const event = request.body;
+
+      // A hook POST that names a user came from another machine's Claude (the
+      // hook script labels only its team deliveries, never its loopback ones).
+      // Stamp the label on the event so the runtime knows not to go looking for
+      // a transcript file that exists on someone else's disk. The label is
+      // attacker-controlled in the same sense the whole body is -- the bearer
+      // token is the actual gate -- so it is sanitized before it can reach a
+      // log line or the office UI.
+      const rawUser = request.headers[TEAM_USER_HEADER];
+      const user = typeof rawUser === 'string' ? sanitizeUserLabel(rawUser) : '';
+      if (user) event[TEAM_EVENT_USER_FIELD] = user;
 
       if (event.session_id && event.hook_event_name) {
         options.onHookEvent?.(providerId, event);
@@ -311,11 +328,27 @@ function timingSafeStringEqual(actual: string, expected: string): boolean {
   return actualBuf.length === expectedBuf.length && crypto.timingSafeEqual(actualBuf, expectedBuf);
 }
 
-function bearerAuth(expectedToken: string) {
+/**
+ * Gate the hook route on either the server token or, when this server hosts a
+ * shared office, the team token.
+ *
+ * The two are not interchangeable anywhere else: the server token also proves
+ * privilege on `/ws` (where it authorizes editing the host's Claude settings),
+ * while the team token is accepted here and nowhere else. A teammate is
+ * additionally required to SAY who they are -- without the user header the
+ * runtime would treat their session as one of the host's own and go looking
+ * for a transcript file that is on another machine.
+ */
+function bearerAuth(expectedToken: string, teamToken?: string) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
-    if (!timingSafeStringEqual(request.headers.authorization ?? '', `Bearer ${expectedToken}`)) {
-      reply.code(401).send('unauthorized');
+    const presented = request.headers.authorization ?? '';
+    if (timingSafeStringEqual(presented, `Bearer ${expectedToken}`)) return;
+    if (teamToken && timingSafeStringEqual(presented, `Bearer ${teamToken}`)) {
+      if (typeof request.headers[TEAM_USER_HEADER] === 'string') return;
+      reply.code(400).send('team token requires a user header');
+      return;
     }
+    reply.code(401).send('unauthorized');
   };
 }
 

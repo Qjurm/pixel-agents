@@ -2,7 +2,7 @@ import * as path from 'path';
 
 import type { AgentEvent, HookProvider } from '../../core/src/provider.js';
 import type { AgentStateStore } from './agentStateStore.js';
-import { SESSION_END_GRACE_MS } from './constants.js';
+import { SESSION_END_GRACE_MS, TEAM_EVENT_USER_FIELD } from './constants.js';
 import type { SessionRouter } from './sessionRouter.js';
 import { getInlineTeammates, hasInlineTeammates, hasPromotedBackgroundAgent } from './teamUtils.js';
 import { cancelPermissionTimer, cancelWaitingTimer } from './timerManager.js';
@@ -37,6 +37,9 @@ interface SessionLifecycleCallbacks {
     sessionId: string,
     transcriptPath: string | undefined,
     cwd: string,
+    /** Display label of the machine that reported this session, when it came
+     *  from a team server rather than this machine's own Claude. */
+    remoteUser?: string,
   ) => void;
   /** Called when /clear is detected via hooks (SessionEnd reason=clear + SessionStart source=clear). */
   onSessionClear?: (
@@ -133,6 +136,21 @@ export class HookEventHandler {
     if (this.provider.protocolVersion !== HookEventHandler.SUPPORTED_PROTOCOL_VERSION) {
       return; // version mismatch already logged in constructor
     }
+    // ── Remote (team) events ──────────────────────────────────────────────────
+    // The event describes a Claude session on someone else's machine. Its
+    // transcript_path and cwd name files on THAT disk; resolving either here
+    // would at best find nothing and at worst collide with a local path that
+    // happens to match. Dropping transcript_path before normalization routes
+    // the session down the existing hooks-only path (fileWatcher.ts) -- no file
+    // watcher, no JSONL seeding, every bit of state from the events themselves,
+    // which is exactly the contract that path was built for. cwd is kept: it
+    // never opens a file, and it is the only hint of what the person is
+    // working on.
+    const remoteUser =
+      typeof event[TEAM_EVENT_USER_FIELD] === 'string'
+        ? (event[TEAM_EVENT_USER_FIELD] as string)
+        : undefined;
+    if (remoteUser) delete event.transcript_path;
     // ── Provider normalization boundary ───────────────────────────────────────
     // All raw Claude-specific fields (tool_name, tool_input, agent_type, teammate_name,
     // task_subject, notification_type,
@@ -243,6 +261,7 @@ export class HookEventHandler {
           sessionId: event.session_id,
           transcriptPath,
           cwd: cwd ?? '',
+          remoteUser,
         });
       } else {
         if (debug && tracked)
@@ -275,6 +294,7 @@ export class HookEventHandler {
         pending.sessionId,
         pending.transcriptPath,
         pending.cwd,
+        pending.remoteUser,
       );
       // Re-process this event now that the agent exists
       this.handleEvent(_providerId, event);

@@ -32,6 +32,10 @@ export interface AgentState {
   hookDelivered: boolean;
   /** True when agent has no transcript file (provider doesn't use JSONL). All state from hooks. */
   hooksOnly?: boolean;
+  /** Display label of the machine that reported this agent, when it belongs to
+   *  someone else in a shared office. Absent for this machine's own agents.
+   *  Always implies hooksOnly -- their transcript is on another disk. */
+  remoteUser?: string;
   /** Provider that created this agent (defaults to 'claude') */
   providerId?: string;
   /** Set when SessionEnd(reason=clear) fires; cleared when SessionStart(source=clear) reassigns */

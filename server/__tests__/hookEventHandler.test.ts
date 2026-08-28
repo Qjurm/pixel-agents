@@ -576,6 +576,8 @@ describe('HookEventHandler', () => {
       'ext-sess',
       '/projects/test/ext-sess.jsonl',
       '/projects/test',
+      // Local session: no team label.
+      undefined,
     );
     // Stop was re-processed after agent creation
     const agent = agents.get(2);
@@ -684,6 +686,72 @@ describe('HookEventHandler', () => {
     expect(externalAgent.sessionId).toBe('ext-sess-2');
   });
 
+  // ── Team (remote) sessions ──────────────────────────────────
+
+  /**
+   * A session reported by a teammate's machine. Its transcript_path names a
+   * file on THEIR disk, so the runtime must be told to forget it: the
+   * hooks-only path is the only correct one, and a path that happens to also
+   * exist here would be actively wrong to read.
+   */
+  it("drops a remote session's transcript_path and passes the reporting user through", () => {
+    const onExternalSessionDetected = vi.fn();
+    handler.setLifecycleCallbacks({ onExternalSessionDetected });
+
+    handler.handleEvent('claude', {
+      hook_event_name: 'SessionStart',
+      session_id: 'team-sess',
+      source: 'startup',
+      transcript_path: '/Users/sanne/.claude/projects/-work-api/team-sess.jsonl',
+      cwd: '/Users/sanne/work/api',
+      __pixelAgentsTeamUser: 'sanne',
+    });
+
+    onExternalSessionDetected.mockImplementation((sessionId: string) => {
+      agents.set(2, createTestAgent({ id: 2, sessionId } as Partial<AgentState>));
+      handler.registerAgent(sessionId, 2);
+    });
+
+    handler.handleEvent('claude', {
+      hook_event_name: 'Stop',
+      session_id: 'team-sess',
+      __pixelAgentsTeamUser: 'sanne',
+    });
+
+    expect(onExternalSessionDetected).toHaveBeenCalledWith(
+      'team-sess',
+      // Not the teammate's transcript path — undefined.
+      undefined,
+      // cwd survives: it opens no file, and it is the only hint of what they
+      // are working on.
+      '/Users/sanne/work/api',
+      'sanne',
+    );
+  });
+
+  it('treats an unlabelled event as local even when it looks foreign', () => {
+    // The label is the ONLY signal. Without it the event came in over loopback
+    // from this machine's own Claude, whatever its paths look like.
+    const onExternalSessionDetected = vi.fn();
+    handler.setLifecycleCallbacks({ onExternalSessionDetected });
+
+    handler.handleEvent('claude', {
+      hook_event_name: 'SessionStart',
+      session_id: 'local-sess',
+      source: 'startup',
+      transcript_path: '/projects/test/local-sess.jsonl',
+      cwd: '/projects/test',
+    });
+    handler.handleEvent('claude', { hook_event_name: 'Stop', session_id: 'local-sess' });
+
+    expect(onExternalSessionDetected).toHaveBeenCalledWith(
+      'local-sess',
+      '/projects/test/local-sess.jsonl',
+      '/projects/test',
+      undefined,
+    );
+  });
+
   // ── Provider-agnostic (optional transcript_path) ────────────
 
   it('SessionStart stores pending with cwd only (no transcript_path)', () => {
@@ -721,6 +789,9 @@ describe('HookEventHandler', () => {
       'no-transcript-sess',
       undefined,
       '/projects/test',
+      // Local session: no team label, so the runtime keeps its normal
+      // tracked-project gate and transcript handling.
+      undefined,
     );
   });
 

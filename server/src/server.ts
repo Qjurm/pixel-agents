@@ -20,6 +20,7 @@ import {
 import { createHttpServer } from './httpServer.js';
 import type { ServerConfig } from './serverConfig.js';
 import { isServerConfig, isServerTarget } from './serverConfig.js';
+import { readOrCreateTeamHostToken } from './teamConfig.js';
 
 export type { ServerConfig } from './serverConfig.js';
 
@@ -48,6 +49,11 @@ export class PixelAgentsServer {
   private app: FastifyInstance | null = null;
   private config: ServerConfig | null = null;
   private ownsServer = false;
+  /** Team-host token for this process, when it owns its server. Deliberately
+   *  NOT part of ServerConfig: that record is written to disk for hook-script
+   *  discovery, and this token has a different audience and a different
+   *  lifetime (stable across restarts, in its own 0600 file). */
+  private teamHostToken: string | null = null;
   private callback: HookEventCallback | null = null;
 
   /** Register a callback for incoming hook events from any provider. */
@@ -92,6 +98,8 @@ export class PixelAgentsServer {
 
     // Start our own server
     const token = crypto.randomUUID();
+    const teamToken = readOrCreateTeamHostToken();
+    this.teamHostToken = teamToken;
     const store = options?.store;
 
     const { app, port } = await createHttpServer({
@@ -99,6 +107,7 @@ export class PixelAgentsServer {
       host: options?.host,
       port: options?.port,
       token,
+      teamToken,
       store: store!,
       runtime: options?.runtime,
       staticDir: options?.staticDir,
@@ -130,6 +139,12 @@ export class PixelAgentsServer {
     console.log(`[Pixel Agents] Server: listening on 127.0.0.1:${port}`);
 
     return this.config;
+  }
+
+  /** The token colleagues present to report agents into this office. Null when
+   *  this process reused someone else's server rather than starting one. */
+  getTeamHostToken(): string | null {
+    return this.ownsServer ? this.teamHostToken : null;
   }
 
   /** Stop the server and clean up its discovery records (only if we own them). */

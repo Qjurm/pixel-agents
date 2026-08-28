@@ -107,3 +107,30 @@ export const PALETTE_COUNT = 6;
  *  clientMessageHandler to guard saveAgentSeats payloads from a remote or
  *  hand-edited source corrupting the stored values with out-of-range values. */
 export const HUE_SHIFT_MAX_DEG = 360;
+
+// ── Team Server (multiplayer) ───────────────────────────────
+/** File (under SERVER_JSON_DIR) listing remote Pixel Agents servers this
+ *  machine should also report to, so several people's agents can share one
+ *  office. Unlike the local registry under SERVERS_DIR, these entries are not
+ *  PID-checked -- the owning process runs on another machine. Written by
+ *  `pixel-agents --join`; see server/src/teamConfig.ts. */
+export const TEAM_JSON_NAME = 'team.json';
+/** Header carrying the reporting user's display label on a remote hook POST.
+ *  Absent on loopback deliveries, which is what makes an event "local". */
+export const TEAM_USER_HEADER = 'x-pixel-agents-user';
+/** File (under SERVER_JSON_DIR) holding this machine's stable team-host token,
+ *  the lower-privilege credential handed to colleagues who join its office. */
+export const TEAM_HOST_TOKEN_NAME = 'team-host-token';
+/** Max length of a user label, after which it is truncated. Keeps a hostile
+ *  or accidental value from blowing up the office UI. */
+export const TEAM_USER_LABEL_MAX = 32;
+/** Field the hook route stamps onto an incoming event when the POST carried a
+ *  user header, i.e. when it came from another machine. HookEvent already has
+ *  an index signature for provider-specific fields, so this rides along
+ *  without widening the onHookEvent signature through both surfaces. The name
+ *  is namespaced because it shares a namespace with Claude's own hook keys. */
+export const TEAM_EVENT_USER_FIELD = '__pixelAgentsTeamUser';
+/** POST timeout for a team server. Longer than the 2s loopback budget because
+ *  the hop is a real network, short enough that an unreachable office never
+ *  becomes a visible stall in the agent it is reporting on. */
+export const TEAM_POST_TIMEOUT_MS = 4_000;

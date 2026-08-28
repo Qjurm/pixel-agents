@@ -1070,8 +1070,12 @@ export function adoptExternalSessionFromHook(
 
   persistAgents: () => void,
   onAgentCreated?: (agent: AgentState) => void,
+  /** Label of the machine that reported this session, when it is not ours.
+   *  Its presence forces the hooks-only path: a remote session's transcript
+   *  lives on another disk, so there is nothing here to watch or replay. */
+  remoteUser?: string,
 ): void {
-  if (transcriptPath) {
+  if (transcriptPath && !remoteUser) {
     // File-based provider (Claude, Codex): adopt with JSONL file watching
     // Guard: don't adopt if file is already tracked by an agent
     for (const agent of agents.values()) {
@@ -1113,9 +1117,19 @@ export function adoptExternalSessionFromHook(
       onAgentCreated?.(adoptedAgent);
     }
   } else {
-    // Hooks-only provider (OpenCode, Copilot): no transcript file, all state from hooks
+    // Hooks-only: no transcript file to read, all state from hooks. Two
+    // populations land here -- providers that have no transcripts at all
+    // (OpenCode, Copilot) and sessions on a teammate's machine.
     const id = nextAgentIdRef.current++;
-    const folderName = folderNameResolver?.({ cwd }) ?? (cwd ? path.basename(cwd) : undefined);
+    const localName = folderNameResolver?.({ cwd }) ?? (cwd ? path.basename(cwd) : undefined);
+    // Whose agent this is matters more in a shared office than which folder it
+    // sits in, so the label leads with the person. Folder is kept when known:
+    // two of someone's agents are otherwise indistinguishable.
+    const folderName = remoteUser
+      ? localName
+        ? `${remoteUser} · ${localName}`
+        : remoteUser
+      : localName;
     const agent: AgentState = {
       id,
       sessionId,
@@ -1140,6 +1154,7 @@ export function adoptExternalSessionFromHook(
       linesProcessed: 0,
       seenUnknownRecordTypes: new Set(),
       folderName,
+      remoteUser,
       contextTokens: 0,
       maxContextTokens: DEFAULT_MAX_CONTEXT_TOKENS,
     };
@@ -1148,7 +1163,7 @@ export function adoptExternalSessionFromHook(
     persistAgents();
     if (debug) {
       console.log(
-        `[Pixel Agents] Hook: Agent ${id} - detected hooks-only external session${folderName ? ` (${folderName})` : ''}`,
+        `[Pixel Agents] Hook: Agent ${id} - detected ${remoteUser ? 'team' : 'hooks-only'} external session${folderName ? ` (${folderName})` : ''}`,
       );
     }
     onAgentCreated?.(agent);

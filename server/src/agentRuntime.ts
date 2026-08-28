@@ -153,7 +153,7 @@ export class AgentRuntime {
 
     // Wire hook lifecycle callbacks to shared agent operations
     this.hookEventHandler.setLifecycleCallbacks({
-      onExternalSessionDetected: (sessionId, transcriptPath, cwd) => {
+      onExternalSessionDetected: (sessionId, transcriptPath, cwd, remoteUser) => {
         const projectDir = transcriptPath ? path.dirname(transcriptPath) : cwd;
         // Teammate session of a tracked lead? Attach it as a teammate character
         // instead of adopting a generic external agent -- and regardless of the
@@ -192,7 +192,13 @@ export class AgentRuntime {
             }
           }
         }
-        if (!isTrackedProjectDir(projectDir) && !this.watchAllSessions.current) {
+        // The tracked-project gate asks "is this session working in a folder
+        // this office knows about?" -- a question about paths on THIS disk. A
+        // teammate's cwd is a path on theirs and will essentially never match,
+        // so applying the gate would silently drop every remote agent unless
+        // each person also turned on Watch All Sessions. Joining the office is
+        // itself the opt-in for the agents reported to it.
+        if (!remoteUser && !isTrackedProjectDir(projectDir) && !this.watchAllSessions.current) {
           console.log(
             `[Pixel Agents] Hook: external session ${sessionId.slice(0, 8)}... not adopted ` +
               `(project untracked, Watch All Sessions off)`,
@@ -212,6 +218,7 @@ export class AgentRuntime {
           this.permissionTimers,
           () => this.store.persist(),
           (agent) => this.registerAgent(agent.sessionId, agent.id),
+          remoteUser,
         );
       },
       onSessionClear: (agentId, newSessionId, newTranscriptPath) => {

@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as http from 'http';
+import * as https from 'https';
 import * as os from 'os';
 import * as path from 'path';
 
@@ -8,9 +9,13 @@ import {
   SERVER_JSON_DIR,
   SERVER_JSON_NAME,
   SERVERS_DIR,
+  TEAM_POST_TIMEOUT_MS,
+  TEAM_USER_HEADER,
 } from '../../../../constants.js';
 import type { ServerConfig, ServerTarget } from '../../../../serverConfig.js';
 import { isServerConfig, isServerTarget } from '../../../../serverConfig.js';
+import type { TeamServer } from '../../../../teamConfig.js';
+import { readTeamServers } from '../../../../teamConfig.js';
 
 const SERVER_JSON = path.join(os.homedir(), SERVER_JSON_DIR, SERVER_JSON_NAME);
 const SERVERS_REGISTRY_DIR = path.join(os.homedir(), SERVER_JSON_DIR, SERVERS_DIR);
@@ -92,32 +97,73 @@ function readRegistry(): ServerConfig[] {
 }
 
 /**
+ * One delivery destination, unified across a locally-registered server and a
+ * remote team server so the fan-out loop does not have to care which is which.
+ */
+interface PostTarget {
+  protocol: 'http' | 'https';
+  host: string;
+  port: number;
+  token: string;
+  /** Set only for a team server: the label this machine's agents wear in the
+   *  shared office. Its ABSENCE is what marks a delivery as local -- the
+   *  receiving server treats an event with no user header as its own. */
+  user?: string;
+}
+
+/** A server registered on this machine is always reached over loopback. */
+function localTarget(server: ServerTarget): PostTarget {
+  return { protocol: 'http', host: '127.0.0.1', port: server.port, token: server.token };
+}
+
+/** A team server carries its own address; the shape already matches. */
+function teamTarget(server: TeamServer): PostTarget {
+  return {
+    protocol: server.protocol,
+    host: server.host,
+    port: server.port,
+    token: server.token,
+    user: server.user,
+  };
+}
+
+/**
  * POST one hook event to one server. Best-effort: every failure path (bad
  * connection, timeout, non-2xx status) resolves quietly -- a dropped delivery
  * to one server must never affect delivery to any other server, nor the
- * script's exit code.
+ * script's exit code. That tolerance is what lets a team server be offline,
+ * asleep, or on the wrong network without disturbing the local office.
  */
 function postToServer(
-  server: ServerTarget,
+  server: PostTarget,
   body: string,
   eventName: string,
   sid: string,
 ): Promise<void> {
-  hookDebug(`POST event=${eventName} sid=${sid} port=${server.port}`);
+  const where = server.user ? `${server.host}:${server.port}` : `port=${server.port}`;
+  hookDebug(`POST event=${eventName} sid=${sid} ${where}`);
   return new Promise((resolve) => {
     try {
-      const req = http.request(
+      const transport = server.protocol === 'https' ? https : http;
+      const headers: Record<string, string | number> = {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+        Authorization: `Bearer ${server.token}`,
+      };
+      // Only a remote delivery is labelled. A team server uses the presence of
+      // this header to decide the event describes someone else's machine, and
+      // therefore that it must not go looking for a local transcript file.
+      if (server.user) headers[TEAM_USER_HEADER] = server.user;
+      const req = transport.request(
         {
-          hostname: '127.0.0.1',
+          hostname: server.host,
           port: server.port,
           path: `${HOOK_API_PREFIX}/claude`,
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(body),
-            Authorization: `Bearer ${server.token}`,
-          },
-          timeout: 2000,
+          headers,
+          // A LAN or WAN hop deserves more patience than loopback, but the
+          // hook still must not stall the agent it is reporting on.
+          timeout: server.user ? TEAM_POST_TIMEOUT_MS : 2000,
         },
         (res) => {
           hookDebug(
@@ -167,6 +213,7 @@ async function main(): Promise<void> {
   // Falls back to the single legacy server.json when the registry has no live
   // entries -- e.g. a server on disk that predates the registry (A1/A2).
   let servers: ServerTarget[] = readRegistry();
+  const teamServers = readTeamServers();
   if (servers.length === 0) {
     try {
       const legacy = JSON.parse(fs.readFileSync(SERVER_JSON, 'utf-8')) as unknown;
@@ -175,10 +222,15 @@ async function main(): Promise<void> {
       }
       servers = [legacy];
     } catch (e) {
-      hookDebug(
-        `exit reason=no-server-json event=${eventName} sid=${sid} path=${SERVER_JSON} err=${e instanceof Error ? e.message : String(e)}`,
-      );
-      process.exit(0);
+      // Only fatal when there is nowhere at all to report. Having joined a team
+      // office is a complete reason to run this hook: someone who watches the
+      // shared office from another machine runs no local server of their own.
+      if (teamServers.length === 0) {
+        hookDebug(
+          `exit reason=no-server-json event=${eventName} sid=${sid} path=${SERVER_JSON} err=${e instanceof Error ? e.message : String(e)}`,
+        );
+        process.exit(0);
+      }
     }
   }
 
@@ -189,8 +241,13 @@ async function main(): Promise<void> {
     if (withDebugLog?.debugLog) debugLogPath = withDebugLog.debugLog;
   }
 
+  const targets: PostTarget[] = [...servers.map(localTarget), ...teamServers.map(teamTarget)];
+  hookDebug(
+    `fan-out event=${eventName} sid=${sid} local=${servers.length} team=${teamServers.length}`,
+  );
+
   const body = JSON.stringify(data);
-  await Promise.all(servers.map((server) => postToServer(server, body, eventName, sid)));
+  await Promise.all(targets.map((target) => postToServer(target, body, eventName, sid)));
 }
 
 main()

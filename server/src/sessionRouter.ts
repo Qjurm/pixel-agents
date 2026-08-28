@@ -3,9 +3,12 @@ import { HOOK_EVENT_BUFFER_MS } from './constants.js';
 /** Pending external session info (waiting for confirmation event before creating agent). */
 export interface PendingExternalSession {
   sessionId: string;
-  /** Transcript file path. Undefined for providers without transcripts (OpenCode, Copilot). */
+  /** Transcript file path. Undefined for providers without transcripts (OpenCode, Copilot),
+   *  and for sessions reported by another machine, whose transcript is not on this disk. */
   transcriptPath: string | undefined;
   cwd: string;
+  /** Set when the session lives on another machine that reports to this office. */
+  remoteUser?: string;
 }
 
 /** An event waiting to be dispatched once its agent registers. */

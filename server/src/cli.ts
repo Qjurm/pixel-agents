@@ -8,6 +8,7 @@
  * Each connecting WebSocket client receives the full state on webviewReady.
  */
 
+import * as os from 'os';
 import * as path from 'path';
 
 import { AgentRuntime } from './agentRuntime.js';
@@ -29,6 +30,13 @@ import { MAX_PORT, MIN_PORT } from './constants.js';
 import { FileStateAdapter } from './fileStateAdapter.js';
 import { claudeProvider, copyHookScript, hookProviderById } from './providers/index.js';
 import { PixelAgentsServer } from './server.js';
+import {
+  parseJoinUrl,
+  readTeamServers,
+  sameAddress,
+  teamJsonPath,
+  writeTeamServers,
+} from './teamConfig.js';
 
 // ── Argument parsing ──────────────────────────────────────────
 
@@ -37,6 +45,14 @@ export interface CliArgs {
    *  can run at once without a collision. --port picks a fixed one. */
   port?: number;
   host: string;
+  /** --join <url>: report this machine's agents to a shared team office. */
+  join?: string;
+  /** --leave <url>: stop reporting to that office. */
+  leave?: string;
+  /** --as <label>: how this machine's agents are named in the shared office. */
+  as?: string;
+  /** --token <token>: team server token, when the --join URL carries none. */
+  token?: string;
 }
 
 /** Thrown by parseArgs on an invalid --port. Kept separate from process.exit so
@@ -65,13 +81,38 @@ export function parseArgs(argv: string[]): CliArgs {
     } else if (argv[i] === '--host' && argv[i + 1]) {
       args.host = argv[i + 1];
       i++;
+    } else if (argv[i] === '--join' && argv[i + 1]) {
+      args.join = argv[i + 1];
+      i++;
+    } else if (argv[i] === '--leave' && argv[i + 1]) {
+      args.leave = argv[i + 1];
+      i++;
+    } else if (argv[i] === '--as' && argv[i + 1]) {
+      args.as = argv[i + 1];
+      i++;
+    } else if (argv[i] === '--token' && argv[i + 1]) {
+      args.token = argv[i + 1];
+      i++;
     } else if (argv[i] === '--help') {
       console.log(`Usage: pixel-agents [options]
 
 Options:
   --port, -p <number>   Port to listen on (default: OS-assigned ephemeral port)
   --host <string>       Host to bind to (default: 127.0.0.1)
-  --help                Show this help message`);
+  --help                Show this help message
+
+Shared office (multiplayer):
+  --join <url>          Also report this machine's agents to a shared office.
+                        Paste the URL that office printed, token included.
+  --as <label>          Name for this machine's agents there (default: $USER)
+  --token <token>       Token, when the --join URL carries none
+  --leave <url>         Stop reporting to that office
+
+  Joining and leaving only edit ~/.pixel-agents/team.json and exit; they never
+  start a server. To HOST an office for your team, bind it where colleagues can
+  reach it and hand them the printed URL:
+
+    pixel-agents --host 0.0.0.0 --port 3100`);
       process.exit(0);
     }
   }
@@ -103,6 +144,76 @@ function copyHookScriptOrReport(packageRoot: string, context = ''): boolean {
 
 // ── Main ──────────────────────────────────────────────────────
 
+/**
+ * Best guess at the address colleagues can actually reach this machine on.
+ * Printing `0.0.0.0` in a join command is printing a bind target, not a
+ * destination; falling back to the display host is fine when the guess fails,
+ * since the operator can always correct the host by hand.
+ */
+function firstNonLoopbackAddress(): string | undefined {
+  for (const addrs of Object.values(os.networkInterfaces())) {
+    for (const addr of addrs ?? []) {
+      if (addr.family === 'IPv4' && !addr.internal) return addr.address;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Apply `--join` / `--leave` to ~/.pixel-agents/team.json and report the
+ * result. Exits the process non-zero on a bad address rather than starting a
+ * server, so a typo in a URL can't quietly leave someone reporting nowhere.
+ */
+function applyTeamMembership(args: CliArgs): void {
+  const existing = readTeamServers();
+
+  if (args.leave) {
+    const parsed = parseJoinUrl(args.leave, 'x', 'x');
+    if (!parsed.ok) {
+      console.error(`[Pixel Agents] --leave: ${parsed.reason}`);
+      process.exit(1);
+    }
+    const remaining = existing.filter((entry) => !sameAddress(entry, parsed.server));
+    if (remaining.length === existing.length) {
+      console.log(
+        `[Pixel Agents] Not a member of ${parsed.server.host}:${parsed.server.port} — nothing to leave.`,
+      );
+      return;
+    }
+    writeTeamServers(remaining);
+    console.log(`[Pixel Agents] Left the office at ${parsed.server.host}:${parsed.server.port}.`);
+    return;
+  }
+
+  // Default the label to the OS user: in an office of colleagues, the machine's
+  // own account name is nearly always the name people already know you by.
+  const label = args.as ?? process.env['USER'] ?? process.env['USERNAME'] ?? 'someone';
+  const parsed = parseJoinUrl(args.join!, label, args.token);
+  if (!parsed.ok) {
+    console.error(`[Pixel Agents] --join: ${parsed.reason}`);
+    process.exit(1);
+  }
+  const server = parsed.server;
+  // Re-joining an address replaces that entry rather than stacking a second
+  // one: a rotated token or a changed label is the common reason to re-run it.
+  const next = [...existing.filter((entry) => !sameAddress(entry, server)), server];
+  writeTeamServers(next);
+
+  console.log(
+    `[Pixel Agents] Joined the office at ${server.host}:${server.port} as "${server.user}".`,
+  );
+  console.log(`[Pixel Agents] Membership saved to ${teamJsonPath()}`);
+  console.log(
+    '[Pixel Agents] Your Claude sessions on this machine will now also appear there.\n' +
+      '               Hooks must be installed locally for this to work — run pixel-agents\n' +
+      '               once and approve them if you have not already.',
+  );
+  console.log(
+    '[Pixel Agents] Note: what is shared is agent ACTIVITY — the folder name, tool names,\n' +
+      '               and file paths your agents touch. Not your prompts or code.',
+  );
+}
+
 async function main(): Promise<void> {
   let args: CliArgs;
   try {
@@ -110,6 +221,14 @@ async function main(): Promise<void> {
   } catch (err) {
     console.error(`[Pixel Agents] ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);
+  }
+
+  // Joining and leaving are config edits, not a server run: they finish before
+  // any asset loading or port binding so `--join` on a machine that never hosts
+  // an office is instant and side-effect-free beyond the one file it writes.
+  if (args.join || args.leave) {
+    applyTeamMembership(args);
+    return;
   }
 
   // dist/ contains both the CLI bundle and the assets/ + webview/ directories
@@ -305,6 +424,24 @@ async function main(): Promise<void> {
     console.log(
       `\n  Pixel Agents server running at http://${displayHost}:${config.port}/?token=${config.token}\n`,
     );
+
+    // A wildcard bind is the only reason to host a shared office, so that is
+    // when the join instructions are worth printing -- and the ONLY token that
+    // appears here is the team one. Handing colleagues the URL above instead
+    // would hand them the power to rewrite this machine's ~/.claude/settings.json.
+    const isSharedBind = args.host === '0.0.0.0' || args.host === '::';
+    const teamToken = server.getTeamHostToken();
+    if (isSharedBind && teamToken) {
+      const lanHost = firstNonLoopbackAddress() ?? displayHost;
+      console.log('  Shared office — colleagues join from their own machine with:\n');
+      console.log(
+        `    npx pixel-agents --join http://${lanHost}:${config.port} --token ${teamToken} --as <name>\n`,
+      );
+      console.log(
+        '  That token only accepts agent events. Keep the URL above (with ?token=) to\n' +
+          "  yourself: it is the one that can change this machine's Claude settings.\n",
+      );
+    }
 
     // ── Graceful shutdown ──
     function shutdown(): void {
