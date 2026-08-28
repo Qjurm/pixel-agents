@@ -1,0 +1,32 @@
+{
+  "id": "ULTRAWIDE",
+  "name": "Ultrawide Monitor",
+  "category": "electronics",
+  "type": "group",
+  "groupType": "state",
+  "canPlaceOnWalls": false,
+  "canPlaceOnSurfaces": true,
+  "backgroundTiles": 1,
+  "members": [
+    {
+      "type": "asset",
+      "id": "ULTRAWIDE_OFF",
+      "file": "ULTRAWIDE_OFF.png",
+      "width": 48,
+      "height": 32,
+      "footprintW": 3,
+      "footprintH": 2,
+      "state": "off"
+    },
+    {
+      "type": "asset",
+      "id": "ULTRAWIDE_ON",
+      "file": "ULTRAWIDE_ON.png",
+      "width": 48,
+      "height": 32,
+      "footprintW": 3,
+      "footprintH": 2,
+      "state": "on"
+    }
+  ]
+}

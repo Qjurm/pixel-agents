@@ -1,0 +1,32 @@
+{
+  "id": "MONITOR",
+  "name": "Widescreen Monitor",
+  "category": "electronics",
+  "type": "group",
+  "groupType": "state",
+  "canPlaceOnWalls": false,
+  "canPlaceOnSurfaces": true,
+  "backgroundTiles": 1,
+  "members": [
+    {
+      "type": "asset",
+      "id": "MONITOR_OFF",
+      "file": "MONITOR_OFF.png",
+      "width": 32,
+      "height": 32,
+      "footprintW": 2,
+      "footprintH": 2,
+      "state": "off"
+    },
+    {
+      "type": "asset",
+      "id": "MONITOR_ON",
+      "file": "MONITOR_ON.png",
+      "width": 32,
+      "height": 32,
+      "footprintW": 2,
+      "footprintH": 2,
+      "state": "on"
+    }
+  ]
+}

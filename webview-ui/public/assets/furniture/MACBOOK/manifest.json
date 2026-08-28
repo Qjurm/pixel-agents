@@ -1,0 +1,32 @@
+{
+  "id": "MACBOOK",
+  "name": "MacBook",
+  "category": "electronics",
+  "type": "group",
+  "groupType": "state",
+  "canPlaceOnWalls": false,
+  "canPlaceOnSurfaces": true,
+  "backgroundTiles": 1,
+  "members": [
+    {
+      "type": "asset",
+      "id": "MACBOOK_OFF",
+      "file": "MACBOOK_OFF.png",
+      "width": 16,
+      "height": 32,
+      "footprintW": 1,
+      "footprintH": 2,
+      "state": "off"
+    },
+    {
+      "type": "asset",
+      "id": "MACBOOK_ON",
+      "file": "MACBOOK_ON.png",
+      "width": 16,
+      "height": 32,
+      "footprintW": 1,
+      "footprintH": 2,
+      "state": "on"
+    }
+  ]
+}
