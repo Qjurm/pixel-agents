@@ -65,6 +65,18 @@ const C = {
   legDark: [0x39, 0x44, 0x49, 255],
   legLit: [0x73, 0x78, 0x7e, 255],
   underDesk: [0x00, 0x00, 0x00, 255],
+  /* The black mesh task chairs at the desks. Three near-blacks rather than one:
+   * a flat black loses the backrest against the seat and the star base against
+   * the floor, and the tone step is the only separation a 16px sprite has. */
+  chairFrame: [0x14, 0x17, 0x19, 255],
+  chairMesh: [0x24, 0x28, 0x2c, 255],
+  chairMeshLit: [0x3b, 0x42, 0x47, 255],
+  /* The one non-black on the chair. Castor hubs catch the light, and without
+   * that glint the base reads as a smudge of shadow instead of wheels. */
+  castor: [0x5c, 0x64, 0x69, 255],
+  /* Matches the contact shadow the bundled chairs already sit on, so a mixed
+   * row of old and new chairs shares one floor. */
+  contact: [0x00, 0x00, 0x00, 51],
 };
 
 /** 5x7 glyphs -- only the characters the wordmark needs. */
@@ -389,6 +401,56 @@ function emitStates(id, name, canvases, footprintW, footprintH, opts = {}) {
   console.log(`  ✓ ${id}  ${members.length} states  ${members[0].width}x${members[0].height}`);
 }
 
+/**
+ * Emit a chair as a front/back/side rotation group.
+ *
+ * Shaped to match the bundled CUSHIONED_CHAIR manifest rather than invented:
+ * the editor's R key cycles a group's orientations, and `layoutToSeats` reads
+ * `orientation` to decide which way the occupant faces. `mirrorSide` on the
+ * side member is what gives the fourth direction without a fourth sprite.
+ */
+function emitRotation(id, name, canvases, footprintW, footprintH) {
+  const dir = join(FURNITURE, id);
+  mkdirSync(dir, { recursive: true });
+  const members = Object.entries(canvases).map(([orientation, canvas]) => {
+    const memberId = `${id}_${orientation.toUpperCase()}`;
+    writeFileSync(join(dir, `${memberId}.png`), canvas.toPng());
+    return {
+      type: 'asset',
+      id: memberId,
+      file: `${memberId}.png`,
+      width: canvas.w,
+      height: canvas.h,
+      footprintW,
+      footprintH,
+      orientation,
+      ...(orientation === 'side' ? { mirrorSide: true } : {}),
+    };
+  });
+  writeFileSync(
+    join(dir, 'manifest.json'),
+    `${JSON.stringify(
+      {
+        id,
+        name,
+        category: 'chairs',
+        type: 'group',
+        groupType: 'rotation',
+        rotationScheme: '3-way-mirror',
+        canPlaceOnWalls: false,
+        canPlaceOnSurfaces: false,
+        backgroundTiles: 0,
+        members,
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  console.log(
+    `  ✓ ${id}  ${members.length} orientations  ${members[0].width}x${members[0].height}`,
+  );
+}
+
 // ── CODE14 sign: the wordmark, 3 tiles wide ──────────────────
 {
   const c = new Canvas(48, 32);
@@ -703,30 +765,35 @@ function drawMacbook(c, lx, ly, lit) {
 }
 
 /**
- * A laptop small enough to stand on a desk, drawn with its deck bottom at row
- * 13 so it lands on the desk plane that starts at row 11.
+ * A laptop small enough to stand on a desk, its deck landing on the desk plane
+ * at `deck` (default row 11, the plane of the bundled DESK_FRONT).
+ *
+ * The plane is a parameter and not a constant because the two desk variants no
+ * longer share a surface height: a laptop hovering above the desktop or sunk
+ * into it is a worse fault than any proportion of the desk under it.
  *
  * Deliberately smaller than the standalone MACBOOK sprite: that one owns a
  * whole tile and is seventeen rows tall, which would make it the size of a
  * wardrobe on a three-tile desk. Shared by both desk variants so the wooden and
  * the white workstation carry the same machine.
  */
-function drawDeskLaptop(c, x, lit) {
+function drawDeskLaptop(c, x, lit, deck = 11) {
+  const lid = deck - 10;
   // Lid: graphite shell, screen inset by one pixel all round.
-  c.rect(x + 1, 1, 12, 9, C.graphite);
+  c.rect(x + 1, lid, 12, 9, C.graphite);
   if (lit) {
-    codeLines(c, x + 2, 2, x + 11, 8);
+    codeLines(c, x + 2, lid + 1, x + 11, lid + 7);
   } else {
-    c.rect(x + 2, 2, 10, 7, C.darker);
-    c.rect(x + 2, 2, 10, 1, C.steelDim); // a sheen row, so it reads off and not hollow
+    c.rect(x + 2, lid + 1, 10, 7, C.darker);
+    c.rect(x + 2, lid + 1, 10, 1, C.steelDim); // a sheen row, so it reads off and not hollow
   }
-  c.rect(x + 1, 10, 12, 1, C.steelDim); // hinge
+  c.rect(x + 1, deck - 1, 12, 1, C.steelDim); // hinge
   // The deck overhangs the lid on both sides. Without that the lid and deck
   // stack into one silhouette and the whole thing reads as a tiny monitor.
-  c.rect(x, 11, 14, 2, C.steel);
-  c.rect(x, 13, 14, 1, C.steelLit); // front lip catching the light
-  for (let kx = x + 2; kx <= x + 11; kx += 2) c.rect(kx, 11, 1, 1, C.graphite);
-  c.rect(x + 5, 12, 4, 1, C.steelDim); // trackpad
+  c.rect(x, deck, 14, 2, C.steel);
+  c.rect(x, deck + 2, 14, 1, C.steelLit); // front lip catching the light
+  for (let kx = x + 2; kx <= x + 11; kx += 2) c.rect(kx, deck, 1, 1, C.graphite);
+  c.rect(x + 5, deck + 1, 4, 1, C.steelDim); // trackpad
 }
 
 // ── A desk with a MacBook on it: somewhere to actually sit ───
@@ -765,27 +832,33 @@ function drawDeskLaptop(c, x, lit) {
 // closed box with a solid front, and the thing that actually names this desk is
 // the gap under the top and the shape of the legs.
 //
-// Geometry is locked to DESK_FRONT: top surface starting at row 11, sprite
-// bottom at row 31. Anything else and these would not line up beside the wooden
-// desks or under the chairs.
+// Sprite bottom stays at row 31 and the footprint at 3x2, which is what keeps
+// these aligned beside the wooden desks and under the chairs. The surface sits
+// a row above DESK_FRONT's plane and the slab is twice as thick: a five-row top
+// on fifteen rows of leg read as a shelf on stilts rather than as a desk.
 {
+  /** The desk plane. One row above DESK_FRONT's, which is as high as it can go
+   *  while the laptop lid still fits inside the sprite. */
+  const DECK = 10;
+
   const drawWhiteDesk = (c) => {
     // Top slab, lit along its back edge so it reads as a surface and not a wall.
-    c.rect(2, 11, 44, 1, C.whiteLit);
-    c.rect(2, 12, 44, 3, C.white);
-    c.rect(2, 15, 44, 1, C.whiteEdge);
+    c.rect(2, DECK, 44, 1, C.whiteLit);
+    c.rect(2, DECK + 1, 44, 6, C.white);
+    c.rect(2, DECK + 7, 44, 1, C.whiteEdge);
     // A one-pixel shadow directly beneath the slab gives it thickness.
-    c.rect(3, 16, 42, 1, C.whiteShadow);
+    c.rect(3, DECK + 8, 42, 1, C.whiteShadow);
 
-    // Two T-legs. The space between them is left transparent on purpose: an
-    // open underside is most of what distinguishes this from the boxed-in
-    // wooden desk at a glance.
-    for (const x of [9, 34]) {
-      c.rect(x, 17, 4, 12, C.white);
-      c.rect(x + 3, 17, 1, 12, C.whiteEdge); // right-hand edge catches shade
-      // Foot: a wide flat bar, wider than the post, as on the real frame.
-      c.rect(x - 3, 29, 10, 2, C.white);
-      c.rect(x - 3, 31, 10, 1, C.whiteShadow);
+    // Two T-legs: posts wide enough to look load-bearing, feet no wider than
+    // they must be. The earlier 4px post under a 10px foot splayed outward and
+    // read as a folding trestle. The space between the legs is left transparent
+    // on purpose -- an open underside is most of what distinguishes this from
+    // the boxed-in wooden desk at a glance.
+    for (const x of [8, 33]) {
+      c.rect(x, 19, 6, 10, C.white);
+      c.rect(x + 5, 19, 1, 10, C.whiteEdge); // right-hand edge catches shade
+      c.rect(x - 1, 29, 8, 2, C.white);
+      c.rect(x - 1, 31, 8, 1, C.whiteShadow);
     }
   };
 
@@ -804,7 +877,7 @@ function drawDeskLaptop(c, x, lit) {
   const build = (lit) => {
     const c = new Canvas(48, 32);
     drawWhiteDesk(c);
-    drawDeskLaptop(c, 17, lit);
+    drawDeskLaptop(c, 17, lit, DECK);
     return c;
   };
   emitStates(
@@ -873,6 +946,126 @@ function drawDeskLaptop(c, x, lit) {
     return c;
   };
   emitStates('ULTRAWIDE', 'Ultrawide Monitor', { off: build(false), on: build(true) }, 3, 2);
+}
+
+// ── The black mesh task chair actually at the desks ──────────
+{
+  /* 16x16 on a 1x1 footprint, base on row 15, matching CUSHIONED_CHAIR exactly.
+   * Seats are derived per footprint tile and characters are drawn against the
+   * tile, so a taller sprite or a different floor row would both misalign the
+   * occupant and split one chair into several seats. */
+
+  /** Mesh, as a weave rather than a fill: a checker of the lighter tone is the
+   *  only texture that survives 16px, and it is what stops the backrest reading
+   *  as the same solid slab as the seat pan. */
+  const mesh = (c, x0, y0, x1, y1) => {
+    c.rect(x0, y0, x1 - x0 + 1, y1 - y0 + 1, C.chairMesh);
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) if ((x + y) % 2 === 0) c.set(x, y, C.chairMeshLit);
+    }
+  };
+
+  /* The five-star base is the single strongest "office chair" signal at this
+   * size, so all three views share one drawing -- a star looks much the same
+   * from any angle, and redrawing it per view only invites them to drift. */
+  const starBase = (c, cx) => {
+    c.rect(cx - 2, 13, 6, 1, C.chairFrame); // hub the column drops into
+    // Three clusters, not one bar: the gaps at cx-3 and cx+4 are what separate
+    // the splayed arms from each other.
+    c.rect(cx - 5, 14, 3, 1, C.chairFrame);
+    c.rect(cx - 1, 14, 4, 1, C.chairFrame);
+    c.rect(cx + 3, 14, 3, 1, C.chairFrame);
+    for (const x of [cx - 6, cx - 2, cx + 2, cx + 5]) {
+      c.rect(x, 15, 2, 1, C.chairFrame);
+      c.set(x, 15, C.castor); // the glint that turns a dark blob into a wheel
+    }
+    c.spans(
+      [
+        [15, cx - 4, cx - 3],
+        [15, cx, cx + 1],
+        [15, cx + 4, cx + 4],
+      ],
+      C.contact,
+    );
+  };
+
+  /** Thin black arms, drawn as a pad over a drop post. */
+  const armrests = (c, y) => {
+    for (const x of [1, 13]) {
+      c.rect(x, y, 2, 1, C.chairFrame);
+      c.set(x === 1 ? 1 : 14, y + 1, C.chairFrame);
+    }
+  };
+
+  const back = () => {
+    const c = new Canvas(16, 16);
+    /* Back-facing chairs are z-sorted IN FRONT of their occupant, so a filled
+     * headrest would erase the agent's head. Drawn as an open ring instead --
+     * which is also what a mesh headrest honestly looks like from behind. */
+    c.rect(4, 1, 8, 1, C.chairFrame);
+    c.set(4, 2, C.chairFrame);
+    c.set(11, 2, C.chairFrame);
+    c.rect(4, 3, 8, 1, C.chairFrame);
+    c.set(5, 4, C.chairFrame); // the two stalks, and the gap that reads as one
+    c.set(10, 4, C.chairFrame);
+    c.rect(3, 5, 10, 1, C.chairFrame);
+    mesh(c, 3, 6, 12, 10);
+    c.rect(3, 6, 1, 5, C.chairFrame);
+    c.rect(12, 6, 1, 5, C.chairFrame);
+    c.rect(3, 11, 10, 1, C.chairFrame);
+    armrests(c, 9);
+    c.rect(2, 12, 12, 1, C.chairFrame); // seat pan, all that shows from behind
+    starBase(c, 7);
+    return c;
+  };
+
+  const front = () => {
+    const c = new Canvas(16, 16);
+    c.rect(4, 0, 8, 1, C.chairFrame);
+    mesh(c, 4, 1, 11, 1);
+    c.rect(4, 2, 8, 1, C.chairFrame);
+    c.set(5, 3, C.chairFrame);
+    c.set(10, 3, C.chairFrame);
+    c.rect(3, 4, 10, 1, C.chairFrame);
+    mesh(c, 3, 5, 12, 8);
+    c.rect(3, 5, 1, 4, C.chairFrame);
+    c.rect(12, 5, 1, 4, C.chairFrame);
+    c.rect(3, 9, 10, 1, C.chairFrame);
+    armrests(c, 8);
+    c.rect(2, 10, 12, 1, C.chairMesh); // seat cushion, lit against its own edge
+    c.rect(3, 10, 10, 1, C.chairMeshLit);
+    c.rect(2, 11, 12, 1, C.chairFrame);
+    c.rect(7, 12, 2, 1, C.castor); // gas lift, the one place the column shows
+    starBase(c, 7);
+    return c;
+  };
+
+  const side = () => {
+    const c = new Canvas(16, 16);
+    c.rect(0, 0, 4, 3, C.chairFrame);
+    mesh(c, 1, 1, 2, 1);
+    c.rect(1, 3, 2, 1, C.chairFrame); // stalk pair, seen edge-on as one post
+    c.rect(0, 4, 4, 8, C.chairFrame);
+    mesh(c, 1, 5, 2, 10);
+    // Seat pan as a slab, not a line: in profile the pan is the only part wide
+    // enough to say how deep the chair is, and a 1px line says "stool".
+    c.rect(4, 9, 9, 1, C.chairMeshLit);
+    c.rect(4, 10, 9, 1, C.chairMesh);
+    c.rect(3, 11, 10, 1, C.chairFrame);
+    c.rect(5, 6, 7, 1, C.chairFrame); // armrest bar, on its front post
+    c.rect(11, 7, 1, 2, C.chairFrame);
+    c.rect(5, 12, 2, 1, C.castor);
+    starBase(c, 6);
+    return c;
+  };
+
+  emitRotation(
+    'OFFICE_CHAIR',
+    'Office Chair',
+    { front: front(), back: back(), side: side() },
+    1,
+    1,
+  );
 }
 
 console.log('CODE14 assets written to webview-ui/public/assets/furniture/');

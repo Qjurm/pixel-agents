@@ -26,14 +26,15 @@ const TILE = { WALL: 0, FLOOR_1: 1, FLOOR_7: 7, FLOOR_9: 9, VOID: 255 };
 /** Grid. The renderer caps layouts at 64x64; this stays well inside it while
  *  leaving walking room around every pod -- characters path with BFS and a
  *  cramped floor makes them queue in the aisles. */
-const COLS = 30;
-const ROWS = 32;
+const COLS = 42;
+const ROWS = 35;
 
-/** A pod is one desk with three chairs tucked under it. Three tiles of chair
- *  means three seats, because seats are derived per chair FOOTPRINT TILE. */
-const POD_W = 3;
-const POD_COLS = [2, 7, 12, 17, 22];
-const POD_ROWS = [4, 9, 14, 19];
+/** One desk, one chair -- a three-across bench per desk looked like a lecture
+ *  hall, not a workspace. Seats are derived per chair footprint tile, so the
+ *  seat count is simply the number of desks now, and the grid grew to keep the
+ *  room in the 40-50 range that was asked for. */
+const POD_COLS = [2, 7, 12, 17, 22, 27, 32, 37];
+const POD_ROWS = [3, 7, 11, 15, 19, 23];
 
 const tiles = new Array(COLS * ROWS).fill(TILE.VOID);
 const tileColors = new Array(COLS * ROWS).fill(null);
@@ -67,8 +68,9 @@ function place(type, col, row) {
 const WOOD = { h: 30, s: 16, b: -6, c: -48 };
 const LOUNGE = { h: 172, s: 14, b: -10, c: -46 };
 
-fill(1, 2, COLS - 2, 23, TILE.FLOOR_7, WOOD);
-fill(1, 24, COLS - 2, ROWS - 2, TILE.FLOOR_1, LOUNGE);
+const LOUNGE_TOP = 27;
+fill(1, 2, COLS - 2, LOUNGE_TOP - 1, TILE.FLOOR_7, WOOD);
+fill(1, LOUNGE_TOP, COLS - 2, ROWS - 2, TILE.FLOOR_1, LOUNGE);
 
 // ── Walls ────────────────────────────────────────────────────
 // A closed perimeter: an open edge lets characters wander off the floor.
@@ -94,10 +96,9 @@ let seats = 0;
 for (const row of POD_ROWS) {
   for (const col of POD_COLS) {
     place('WHITE_DESK_MACBOOK_OFF', col, row);
-    for (let i = 0; i < POD_W; i++) {
-      place('CUSHIONED_CHAIR_BACK', col + i, row + 2);
-      seats++;
-    }
+    // Centred under the three-tile desk, facing up into it.
+    place('OFFICE_CHAIR_BACK', col + 1, row + 2);
+    seats++;
   }
 }
 
@@ -105,42 +106,42 @@ for (const row of POD_ROWS) {
 place('CODE14_SLOGAN', 3, 0);
 place('CODE14_LOGO', 8, 0);
 place('ISO_CERTIFICATE', 12, 0);
-place('SCALEWARE_SIGN', 16, 0);
-place('HOGEPAD_SIGN', 21, 0);
-place('CLOCK', 26, 0);
+place('SCALEWARE_SIGN', 17, 0);
+place('HOGEPAD_SIGN', 23, 0);
+place('CODE14_PANEL', 28, 0);
+place('CLOCK', 32, 0);
+place('LARGE_PAINTING', 35, 0);
 
-// Side-wall pieces, spaced down the right-hand wall.
-place('CODE14_PANEL', COLS - 2, 6);
-place('SMALL_PAINTING', COLS - 2, 11);
-place('CODE14_PANEL', COLS - 2, 16);
-place('PADEL_RACKET', COLS - 2, 21);
+// Nothing on the side walls. Wall pieces are drawn as if you are looking
+// straight at them, so on a wall running away from the camera they hang at the
+// wrong angle and read as floating boards. The back wall is the only one that
+// faces the viewer, so that is where signage goes.
 
 // ── Greenery, so the aisles are not bare ─────────────────────
-for (const row of [5, 10, 15, 20]) {
-  place('PLANT', COLS - 4, row);
-  place('PLANT_2', 27, row + 2);
-}
-place('LARGE_PLANT', 2, 24 - 3);
+// Greenery in the aisle down the right, well clear of the wall.
+for (const row of [4, 10, 16, 22]) place('PLANT', COLS - 3, row);
+place('LARGE_PLANT', COLS - 4, LOUNGE_TOP - 4);
 
 // ── Lounge: coffee, sofas, and Wednesday ─────────────────────
-place('SOFA_BACK', 4, 26);
-place('SOFA_BACK', 6, 26);
-place('COFFEE_TABLE', 5, 28);
-place('SOFA_FRONT', 4, 30);
-place('SOFA_FRONT', 6, 30);
+place('SOFA_BACK', 4, LOUNGE_TOP + 1);
+place('SOFA_BACK', 6, LOUNGE_TOP + 1);
+place('COFFEE_TABLE', 5, LOUNGE_TOP + 3);
+place('SOFA_FRONT', 4, LOUNGE_TOP + 6);
+place('SOFA_FRONT', 6, LOUNGE_TOP + 6);
 
-place('TABLE_FRONT', 12, 26);
-for (let i = 0; i < 3; i++) place('CUSHIONED_CHAIR_BACK', 12 + i, 25);
-for (let i = 0; i < 3; i++) place('CUSHIONED_CHAIR_FRONT', 12 + i, 30);
+place('TABLE_FRONT', 14, LOUNGE_TOP + 1);
+for (let i = 0; i < 3; i++) place('CUSHIONED_CHAIR_BACK', 14 + i, LOUNGE_TOP);
+for (let i = 0; i < 3; i++) place('CUSHIONED_CHAIR_FRONT', 14 + i, LOUNGE_TOP + 5);
 // The lunch table is where gehaktbalwoensdag and the daily bread live.
-place('GEHAKTBAL_PAN', 13, 27);
-place('BREAD_BASKET', 14, 27);
-place('COFFEE', 12, 27);
+place('GEHAKTBAL_PAN', 15, LOUNGE_TOP + 2);
+place('BREAD_BASKET', 16, LOUNGE_TOP + 2);
+place('COFFEE', 14, LOUNGE_TOP + 2);
 
-place('WHITEBOARD', 20, 25);
-place('DOUBLE_BOOKSHELF', 24, 26);
-place('BIN', 26, 30);
-place('LARGE_PLANT', 22, 28);
+place('WHITEBOARD', 24, LOUNGE_TOP);
+place('DOUBLE_BOOKSHELF', 30, LOUNGE_TOP + 1);
+place('BIN', 36, LOUNGE_TOP + 5);
+place('LARGE_PLANT', 33, LOUNGE_TOP + 3);
+place('PADEL_RACKET', 27, LOUNGE_TOP + 1);
 
 const layout = {
   version: 1,

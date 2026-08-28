@@ -233,6 +233,48 @@ export function phrasesFor(category: ActivityCategory): readonly string[] {
   return PHRASES[category];
 }
 
+/**
+ * House phrases: the things that only happen at CODE14.
+ *
+ * Kept out of the category lists and drawn from occasionally instead, so they
+ * land as an easter egg rather than as the office repeating the same in-joke
+ * every third label. Any activity can produce one -- what somebody is actually
+ * doing has nothing to do with whether they are eyeing up the Friday drinks.
+ *
+ * These name real colleagues, warmly and at their own request. Keep it that
+ * way: this text shows up on everybody's screen, including theirs.
+ */
+const HOUSE_PHRASES: readonly string[] = [
+  'Harm-Jan lief aankijken',
+  'wachten tot Jelle knikt',
+  'Geerten Pas om hulp vragen',
+  'klagen bij Jordy ten Den',
+  'een gunst vragen aan Tune Mulderij',
+  'geld vragen aan Laura Klein Horstman',
+  'het project bijwerken in RITA',
+  'een ticket verstoppen in RITA',
+  'de vrijdagmiddagborrel voorbereiden',
+  'aftellen tot de borrel',
+  'de configurator overtuigen',
+  'een bedrijfsbureau digitaliseren',
+  'wachten op gehaktbalwoensdag',
+  'de laatste gehaktbal claimen',
+  'brood halen bij de bakker',
+  'een lunchwandeling inplannen',
+  'de padelbaan reserveren',
+  'zich drukken voor de bootcamp',
+  'business denken, tech doen',
+  'de hydraulische carrièremachine oliën',
+  'digitale complexiteit vereenvoudigen',
+  'een flinke tik eigenwijs doen',
+  'iets uitleggen aan de business',
+  'zeggen dat het in Laravel kan',
+];
+
+/** How often a house phrase turns up instead of a generic one, as one-in-N.
+ *  Four felt right: often enough to notice, rare enough to stay a joke. */
+const HOUSE_EVERY = 4;
+
 /** Cheap, stable string hash. Not cryptographic -- it only has to spread. */
 function hash(seed: string): number {
   let h = 2166136261;
@@ -252,8 +294,18 @@ function hash(seed: string): number {
  * different words because the seed includes the tool's own id.
  */
 export function maskedPhrase(category: ActivityCategory, seed: string): string {
+  const h = hash(`${category}:${seed}`);
+  // The coin flip reads the HIGH bits of a separately-seeded hash. A second
+  // hash alone is not enough: FNV's low bits stay correlated across seeds that
+  // share a suffix, and measured over 20k seeds that cost six of the
+  // twenty-four reading phrases -- they were only ever chosen on ticks where
+  // the house draw also fired, so they never appeared at all. Shifting past
+  // those bits reaches every phrase while holding the same one-in-four rate.
+  if ((hash(`house:${seed}`) >>> 8) % HOUSE_EVERY === 0) {
+    return HOUSE_PHRASES[h % HOUSE_PHRASES.length]!;
+  }
   const options = PHRASES[category];
-  return options[hash(`${category}:${seed}`) % options.length]!;
+  return options[h % options.length]!;
 }
 
 /**

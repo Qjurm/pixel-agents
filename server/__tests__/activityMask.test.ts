@@ -5,6 +5,7 @@ import {
   categoriseTool,
   isActivityCategory,
   maskedPhrase,
+  phrasesFor,
   representativeTool,
 } from '../src/activityMask.js';
 
@@ -91,5 +92,48 @@ describe('isActivityCategory', () => {
     expect(isActivityCategory('Read')).toBe(false);
     expect(isActivityCategory(undefined)).toBe(false);
     expect(isActivityCategory(42)).toBe(false);
+  });
+});
+
+/**
+ * The house phrases are in-jokes about real colleagues. They are meant to
+ * surface now and then, from any activity -- what somebody is doing has
+ * nothing to do with whether they are eyeing the Friday drinks.
+ */
+describe('house phrases', () => {
+  const isHouse = (p: string) =>
+    !ACTIVITY_CATEGORIES.some((c) => (phrasesFor(c) as readonly string[]).includes(p));
+
+  it('turns up sometimes, but stays the minority', () => {
+    const seeds = Array.from({ length: 400 }, (_, i) => `tool-${String(i)}`);
+    const house = seeds.filter((seed) => isHouse(maskedPhrase('writing', seed))).length;
+    // Roughly one in four by design. Wide bounds: this pins "an occasional
+    // easter egg" rather than an exact ratio, which the hash does not promise.
+    expect(house).toBeGreaterThan(40);
+    expect(house).toBeLessThan(200);
+  });
+
+  it('can come up for any kind of activity', () => {
+    for (const category of ACTIVITY_CATEGORIES) {
+      const seeds = Array.from({ length: 200 }, (_, i) => `x-${String(i)}`);
+      expect(seeds.some((seed) => isHouse(maskedPhrase(category, seed)))).toBe(true);
+    }
+  });
+
+  it('still holds still for one activity', () => {
+    // The whole point of seeding rather than randomising: a label must not
+    // reshuffle between two reads of the same tool.
+    const first = maskedPhrase('running', 'stable-seed');
+    expect(maskedPhrase('running', 'stable-seed')).toBe(first);
+  });
+
+  it('does not strand any generic phrase behind the house draw', () => {
+    // The coin flip uses a different hash from the index for exactly this
+    // reason: sharing one number would make some indices unreachable.
+    const seen = new Set<string>();
+    for (let i = 0; i < 3000; i++) seen.add(maskedPhrase('reading', `s-${String(i)}`));
+    for (const phrase of phrasesFor('reading')) {
+      expect(seen).toContain(phrase);
+    }
   });
 });
