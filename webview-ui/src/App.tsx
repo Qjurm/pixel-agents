@@ -7,6 +7,7 @@ import { ConnectionIndicator } from './components/ConnectionIndicator.js';
 import { DebugView } from './components/DebugView.js';
 import { EditActionBar } from './components/EditActionBar.js';
 import { IntroBubble } from './components/IntroBubble.js';
+import { LeaderboardModal } from './components/LeaderboardModal.js';
 import { MigrationNotice } from './components/MigrationNotice.js';
 import { SettingsModal } from './components/SettingsModal.js';
 import { Tooltip } from './components/Tooltip.js';
@@ -104,6 +105,7 @@ function App() {
 
   const [isChangelogOpen, setIsChangelogOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isScoresOpen, setIsScoresOpen] = useState(false);
   const [isHooksInfoOpen, setIsHooksInfoOpen] = useState(false);
   const [hooksTooltipDismissed, setHooksTooltipDismissed] = useState(false);
   const [isDebugMode, setIsDebugMode] = useState(false);
@@ -516,6 +518,8 @@ function App() {
         onOpenClaude={editor.handleOpenClaude}
         onToggleEditMode={editor.handleToggleEditMode}
         isSettingsOpen={isSettingsOpen}
+        isScoresOpen={isScoresOpen}
+        onToggleScores={() => setIsScoresOpen((open) => !open)}
         onToggleSettings={() => setIsSettingsOpen((v) => !v)}
         workspaceFolders={workspaceFolders}
       />
@@ -535,6 +539,7 @@ function App() {
         currentVersion={extensionVersion}
       />
 
+      <LeaderboardModal isOpen={isScoresOpen} onClose={() => setIsScoresOpen(false)} />
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}

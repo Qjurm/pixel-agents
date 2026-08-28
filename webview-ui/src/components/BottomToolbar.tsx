@@ -12,6 +12,8 @@ interface BottomToolbarProps {
   onToggleEditMode: () => void;
   isSettingsOpen: boolean;
   onToggleSettings: () => void;
+  isScoresOpen: boolean;
+  onToggleScores: () => void;
   workspaceFolders: WorkspaceFolder[];
 }
 
@@ -21,6 +23,8 @@ export function BottomToolbar({
   onToggleEditMode,
   isSettingsOpen,
   onToggleSettings,
+  isScoresOpen,
+  onToggleScores,
   workspaceFolders,
 }: BottomToolbarProps) {
   const [isFolderPickerOpen, setIsFolderPickerOpen] = useState(false);
@@ -148,8 +152,8 @@ export function BottomToolbar({
       )}
       {isBrowserRuntime && (
         <Button
-          variant="default"
-          onClick={() => window.open('/scores', '_blank', 'noopener')}
+          variant={isScoresOpen ? 'active' : 'default'}
+          onClick={onToggleScores}
           title="Who has burned the most tokens"
         >
           Scores
