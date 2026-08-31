@@ -250,10 +250,42 @@ export function phrasesFor(category: ActivityCategory): readonly string[] {
  * way: this text shows up on everybody's screen, including theirs.
  *
  * First names only. A surname on a label two dozen pixels tall reads as a
- * personnel file rather than as a room where people know each other -- and in
- * an office this size the first name is already unambiguous.
+ * personnel file rather than as a room where people know each other -- and it
+ * is also exactly how the team page names people.
+ *
+ * The roster comes from code14.nl/over-ons, which publishes 33 first names and
+ * no job titles. So none of these mention what anybody DOES: the jokes are
+ * about ordinary office moments, not about roles that would have had to be
+ * guessed. Two Jelles and two Nielses are distinguished on that page but not
+ * here -- in a joke, "Jelle" is friendlier than a disambiguated database
+ * field.
  */
 const HOUSE_PHRASES: readonly string[] = [
+  'Leon om een second opinion vragen',
+  'doen alsof Cees dit al goedgekeurd heeft',
+  'Bram uitleggen dat het echt simpel is',
+  'Niels erbij roepen en wegrennen',
+  'Christian vragen of het mag',
+  'op een review van Sven wachten',
+  'Jesse aan zijn woord houden',
+  'kort sparren met Jop, twee uur later',
+  'met Rick bij de koffieautomaat verdwijnen',
+  'Jos vragen waar dit ook alweer stond',
+  'Tim er even naar laten kijken',
+  'Sietse meenemen in de scope',
+  'Wouter een ticket toeschuiven',
+  'Jorian om hulp roepen',
+  'even bij Olcan langs',
+  'Sil iets aanleren',
+  'Jaimy op de hoogte houden',
+  'Linde om feedback vragen en hopen',
+  'Jacob erbij halen voor de zekerheid',
+  'Lodewijk laten meelezen',
+  'Britt overtuigen met een schema',
+  'Collin een demo geven die net werkt',
+  'Michael om een besluit vragen',
+  'Marian ergens in meenemen',
+  'Ineke om de sleutels vragen',
   'Harm-Jan lief aankijken',
   'wachten tot Jelle knikt',
   'Geerten om hulp vragen',
