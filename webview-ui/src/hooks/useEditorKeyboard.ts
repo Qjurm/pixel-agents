@@ -8,6 +8,8 @@ export function useEditorKeyboard(
   isEditMode: boolean,
   editorState: EditorState,
   onDeleteSelected: () => void,
+  onCopySelected: () => void,
+  onPasteClipboard: () => void,
   onRotateSelected: () => void,
   onToggleState: () => void,
   onUndo: () => void,
@@ -66,6 +68,18 @@ export function useEditorKeyboard(
         if (editorState.selectedFurnitureUid) {
           onDeleteSelected();
         }
+      } else if ((e.key === 'c' || e.key === 'C') && (e.ctrlKey || e.metaKey)) {
+        // Only when something is selected, so an unselected Ctrl+C still copies
+        // whatever the browser would have copied instead of silently eating it.
+        if (editorState.selectedFurnitureUid) {
+          e.preventDefault();
+          onCopySelected();
+        }
+      } else if ((e.key === 'v' || e.key === 'V') && (e.ctrlKey || e.metaKey)) {
+        if (editorState.clipboard) {
+          e.preventDefault();
+          onPasteClipboard();
+        }
       } else if (e.key === 'r' || e.key === 'R') {
         onRotateSelected();
       } else if (e.key === 't' || e.key === 'T') {
@@ -95,6 +109,8 @@ export function useEditorKeyboard(
     isEditMode,
     editorState,
     onDeleteSelected,
+    onCopySelected,
+    onPasteClipboard,
     onRotateSelected,
     onToggleState,
     onUndo,

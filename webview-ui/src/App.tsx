@@ -222,6 +222,8 @@ function App() {
     editor.isEditMode,
     editorState,
     editor.handleDeleteSelected,
+    editor.handleCopySelected,
+    editor.handlePasteClipboard,
     editor.handleRotateSelected,
     editor.handleToggleState,
     editor.handleUndo,

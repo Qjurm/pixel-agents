@@ -841,22 +841,28 @@ function drawDeskLaptop(c, x, lit, deck = 11) {
    *  while the laptop lid still fits inside the sprite. */
   const DECK = 10;
 
-  const drawWhiteDesk = (c) => {
-    // Top slab, lit along its back edge so it reads as a surface and not a wall.
-    c.rect(2, DECK, 44, 1, C.whiteLit);
-    c.rect(2, DECK + 1, 44, 7, C.white);
-    c.rect(2, DECK + 8, 44, 1, C.whiteEdge);
-    // A one-pixel shadow directly beneath the slab gives it thickness.
-    c.rect(3, DECK + 9, 42, 1, C.whiteShadow);
+  /** Where the frame takes over from the top. The slab grew DOWNWARD to get
+   *  deeper rather than upward, because DECK is also where the laptop stands
+   *  and one row higher clips its lid off the top of the sprite. */
+  const FRAME_TOP = 24;
 
-    // Two T-legs, back at their original slim proportions. Widening the posts
-    // was tried and rejected: the frame is not what looked wrong, the thin
-    // tabletop above it was, and a chunkier post just made the desk heavy. The
-    // space between the legs stays transparent -- an open underside is most of
-    // what distinguishes this from the boxed-in wooden desk at a glance.
+  const drawWhiteDesk = (c) => {
+    // A deep worktop. This is the surface you are meant to notice: a desk seen
+    // from above is mostly tabletop, and the earlier thin band read as a shelf
+    // no matter what the legs did.
+    c.rect(2, DECK, 44, 1, C.whiteLit); // back edge catches the light
+    c.rect(2, DECK + 1, 44, FRAME_TOP - DECK - 3, C.white);
+    c.rect(2, FRAME_TOP - 2, 44, 1, C.whiteEdge); // front lip
+    c.rect(3, FRAME_TOP - 1, 42, 1, C.whiteShadow); // the lip's own shadow
+
+    // The frame is now a short drop rather than most of the sprite. Slim posts
+    // on purpose -- widening them was tried and rejected, since the frame was
+    // never what looked wrong. The gap between the legs stays transparent:
+    // an open underside is most of what distinguishes this from the boxed-in
+    // wooden desk at a glance.
     for (const x of [9, 34]) {
-      c.rect(x, 19, 4, 10, C.white);
-      c.rect(x + 3, 19, 1, 10, C.whiteEdge); // right-hand edge catches shade
+      c.rect(x, FRAME_TOP, 4, 29 - FRAME_TOP, C.white);
+      c.rect(x + 3, FRAME_TOP, 1, 29 - FRAME_TOP, C.whiteEdge);
       c.rect(x - 3, 29, 10, 2, C.white);
       c.rect(x - 3, 31, 10, 1, C.whiteShadow);
     }

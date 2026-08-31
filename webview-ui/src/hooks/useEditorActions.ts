@@ -68,6 +68,8 @@ interface EditorActions {
   handlePickedFurnitureColorChange: (color: ColorValue | null) => void;
   handleFurnitureTypeChange: (type: string) => void; // FurnitureType enum or asset ID
   handleDeleteSelected: () => void;
+  handleCopySelected: () => void;
+  handlePasteClipboard: () => void;
   handleRotateSelected: () => void;
   handleToggleState: () => void;
   handleUndo: () => void;
@@ -450,6 +452,81 @@ export function useEditorActions(
       applyEdit(newLayout);
       editorState.clearSelection();
       colorEditUidRef.current = null;
+    }
+  }, [getOfficeState, editorState, applyEdit]);
+
+  /**
+   * Copy the selected item, and arm the placement tool with it.
+   *
+   * Copying does double duty on purpose. Storing it in the clipboard is what
+   * makes Ctrl+V work, but loading it into the placement tool as well means the
+   * obvious next thing -- click, click, click to lay down a row of desks --
+   * works without pressing paste at all. That is what the existing eyedropper
+   * tool does, so the two now behave the same way.
+   */
+  const handleCopySelected = useCallback(() => {
+    const uid = editorState.selectedFurnitureUid;
+    if (!uid) return;
+    const item = getOfficeState()
+      .getLayout()
+      .furniture.find((f) => f.uid === uid);
+    if (!item) return;
+
+    editorState.clipboard = {
+      type: item.type,
+      ...(item.color ? { color: { ...item.color } } : {}),
+    };
+    editorState.selectedFurnitureType = item.type;
+    editorState.pickedFurnitureColor = item.color ? { ...item.color } : null;
+    editorState.activeTool = EditTool.FURNITURE_PLACE;
+    setEditorTick((n) => n + 1);
+  }, [getOfficeState, editorState]);
+
+  /**
+   * Paste a copy of whatever was last copied.
+   *
+   * Lands under the cursor when the cursor is over the grid, because that is
+   * where a person is looking. With the mouse elsewhere -- pasting straight
+   * after a keyboard copy, say -- it steps one tile down and right from the
+   * original instead, which is visible without hunting and never lands exactly
+   * on top of what it was copied from.
+   *
+   * A blocked target is a no-op rather than a nudge to somewhere free: silently
+   * moving furniture to a tile nobody pointed at is more confusing than nothing
+   * happening.
+   */
+  const handlePasteClipboard = useCallback(() => {
+    const clip = editorState.clipboard;
+    if (!clip) return;
+    const os = getOfficeState();
+    const layout = os.getLayout();
+
+    let col = editorState.ghostCol;
+    let row = editorState.ghostRow;
+    if (col < 0 || row < 0) {
+      const source = layout.furniture.find((f) => f.type === clip.type);
+      if (!source) return;
+      col = source.col + 1;
+      row = source.row + 1;
+    }
+
+    const placementRow = getWallPlacementRow(clip.type, row);
+    if (!canPlaceFurniture(layout, clip.type, col, placementRow)) return;
+
+    const placed: PlacedFurniture = {
+      uid: `f-${String(Date.now())}-${Math.random().toString(36).slice(2, 6)}`,
+      type: clip.type,
+      col,
+      row: placementRow,
+    };
+    if (clip.color) placed.color = { ...clip.color };
+
+    const newLayout = placeFurniture(layout, placed);
+    if (newLayout !== layout) {
+      applyEdit(newLayout);
+      // Select the copy, so Ctrl+V then arrow-free drag or R acts on the thing
+      // that just appeared rather than on the original.
+      editorState.selectedFurnitureUid = placed.uid;
     }
   }, [getOfficeState, editorState, applyEdit]);
 
@@ -938,6 +1015,8 @@ export function useEditorActions(
     handlePickedFurnitureColorChange,
     handleFurnitureTypeChange,
     handleDeleteSelected,
+    handleCopySelected,
+    handlePasteClipboard,
     handleRotateSelected,
     handleToggleState,
     handleUndo,

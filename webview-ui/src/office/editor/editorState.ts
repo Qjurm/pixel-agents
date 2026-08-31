@@ -38,6 +38,13 @@ export class EditorState {
   // Selection
   selectedFurnitureUid: string | null = null;
 
+  /** Copied furniture, kept as its TYPE and colour rather than as a reference
+   *  to the placed item. A uid would go stale the moment the original is moved,
+   *  rotated or deleted, and pasting a stale reference is worse than an empty
+   *  clipboard. Survives tool changes and deselection on purpose: copy once,
+   *  paste several times. */
+  clipboard: { type: string; color?: ColorValue } | null = null;
+
   // Mouse drag state (tile paint)
   isDragging = false;
 
