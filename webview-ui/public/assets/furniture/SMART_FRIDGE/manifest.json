@@ -1,0 +1,32 @@
+{
+  "id": "SMART_FRIDGE",
+  "name": "Smart Fridge",
+  "category": "electronics",
+  "type": "group",
+  "groupType": "state",
+  "canPlaceOnWalls": false,
+  "canPlaceOnSurfaces": false,
+  "backgroundTiles": 1,
+  "members": [
+    {
+      "type": "asset",
+      "id": "SMART_FRIDGE_OFF",
+      "file": "SMART_FRIDGE_OFF.png",
+      "width": 16,
+      "height": 32,
+      "footprintW": 1,
+      "footprintH": 2,
+      "state": "off"
+    },
+    {
+      "type": "asset",
+      "id": "SMART_FRIDGE_ON",
+      "file": "SMART_FRIDGE_ON.png",
+      "width": 16,
+      "height": 32,
+      "footprintW": 1,
+      "footprintH": 2,
+      "state": "on"
+    }
+  ]
+}

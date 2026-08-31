@@ -314,6 +314,65 @@ function emit(id, name, canvas, footprintW, footprintH, opts = {}) {
  * do. `canPlaceOnWalls` is an option here and not a constant, because unlike
  * the desk hardware one of these (the meeting light) hangs on a wall.
  */
+/**
+ * Emit a rotation group: several orientations of one object that the editor's
+ * R key cycles through.
+ *
+ * A single `type: "asset"` cannot be rotated at all -- `getRotatedType` looks
+ * the type up in a rotation group and returns null when it finds none, so R
+ * silently does nothing. That is what made the toilet feel broken.
+ *
+ * `3-way-mirror` is three sprites for four placements: the side view is
+ * mirrored for the fourth, which is why `mirrorSide` is set on that member.
+ */
+function emitRotation(id, name, canvases, footprintW, footprintH, opts = {}) {
+  const {
+    category = 'misc',
+    canPlaceOnWalls = false,
+    canPlaceOnSurfaces = false,
+    backgroundTiles = 0,
+  } = opts;
+  const dir = join(FURNITURE, id);
+  mkdirSync(dir, { recursive: true });
+  const members = Object.entries(canvases).map(([orientation, canvas]) => {
+    const memberId = `${id}_${orientation.toUpperCase()}`;
+    writeFileSync(join(dir, `${memberId}.png`), canvas.toPng());
+    return {
+      type: 'asset',
+      id: memberId,
+      file: `${memberId}.png`,
+      width: canvas.w,
+      height: canvas.h,
+      footprintW,
+      footprintH,
+      orientation,
+      ...(orientation === 'side' ? { mirrorSide: true } : {}),
+    };
+  });
+  writeFileSync(
+    join(dir, 'manifest.json'),
+    `${JSON.stringify(
+      {
+        id,
+        name,
+        category,
+        type: 'group',
+        groupType: 'rotation',
+        rotationScheme: '3-way-mirror',
+        canPlaceOnWalls,
+        canPlaceOnSurfaces,
+        backgroundTiles,
+        members,
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  console.log(
+    `  ✓ ${id}  ${members.length} orientations  ${members[0].width}x${members[0].height}`,
+  );
+}
+
 function emitStates(id, name, canvases, footprintW, footprintH, opts = {}) {
   const {
     category = 'electronics',
@@ -941,7 +1000,96 @@ function emitStates(id, name, canvases, footprintW, footprintH, opts = {}) {
   c.rect(9, 24, 1, 5, C.porcelainShade);
   c.rect(3, 29, 10, 1, C.dark);
   c.rect(3, 30, 10, 1, C.underShadow);
-  emit('TOILET', 'Toilet', c, 1, 2, { category: 'misc', backgroundTiles: 1 });
+  // ── Back and side views, so the thing can be turned ──────────
+  // A lone asset cannot rotate: R looks the type up in a rotation group, finds
+  // none and does nothing. A fixture you cannot face into a corner is not much
+  // use in a washroom.
+
+  /** From behind: the cistern is nearest the viewer and hides most of the pan.
+   *  Only the far lip of the seat shows above it -- drawing the whole ring back
+   *  there produced a second seat floating over the tank. */
+  const back = new Canvas(16, 32);
+  {
+    const b = back;
+    const lip = [
+      [5, 4, 11],
+      [6, 3, 12],
+      [7, 3, 12],
+    ];
+    b.spans(lip, C.porcelain);
+    for (const [y, x0, x1] of lip) {
+      b.set(x0, y, C.dark);
+      b.set(x1, y, C.dark);
+    }
+    b.rect(3, 8, 10, 1, C.dark);
+    // The tank, taller from this side because nothing is in front of it.
+    b.panel(2, 9, 12, 14, C.dark, C.porcelain);
+    b.rect(3, 17, 10, 5, C.porcelainShade);
+    b.rect(6, 12, 4, 2, C.porcelainDim); // the flush plate, seen square on
+    b.rect(7, 12, 2, 1, C.steelDim);
+    b.rect(4, 23, 8, 5, C.porcelain);
+    b.rect(4, 23, 1, 5, C.dark);
+    b.rect(11, 23, 1, 5, C.porcelainDim);
+    b.rect(3, 28, 10, 1, C.dark);
+    b.rect(3, 29, 10, 1, C.underShadow);
+  }
+
+  /** In profile the L is the whole read, and the first attempt did not have
+   *  one: a narrow tank floating ABOVE the seat made a sprite indistinguishable
+   *  from the washbasin standing next to it. The tank has to be a tall mass
+   *  BESIDE the seat, reaching down to it, with the seat cantilevered out. */
+  const side = new Canvas(16, 32);
+  {
+    const d = side;
+    // Cistern: tall, and it comes all the way down to seat height.
+    d.panel(2, 6, 6, 15, C.dark, C.porcelain);
+    d.rect(3, 15, 4, 5, C.porcelainShade);
+    d.rect(4, 8, 2, 2, C.porcelainDim); // flush plate on the top face
+    d.set(5, 8, C.steelDim);
+
+    // Seat, cantilevered away from the tank at a single clear height.
+    d.rect(7, 14, 7, 2, C.porcelain);
+    d.rect(7, 14, 7, 1, C.whiteLit);
+    d.rect(7, 16, 7, 1, C.dark);
+    d.set(13, 15, C.dark); // the far lip, so the seat has an end
+
+    // Bowl hanging under the seat, tapering as it drops.
+    d.spans(
+      [
+        [17, 8, 13],
+        [18, 8, 13],
+        [19, 8, 12],
+        [20, 9, 12],
+      ],
+      C.porcelain,
+    );
+    for (const [y, x0, x1] of [
+      [17, 8, 13],
+      [18, 8, 13],
+      [19, 8, 12],
+      [20, 9, 12],
+    ]) {
+      d.set(x0, y, C.dark);
+      d.set(x1, y, C.porcelainDim);
+    }
+    d.rect(9, 17, 3, 1, C.bowlDark); // opening, glimpsed under the rim
+
+    // Foot: under the bowl, not under the tank, which is what stops the whole
+    // thing reading as a pedestal basin.
+    d.rect(9, 21, 4, 7, C.porcelain);
+    d.rect(9, 21, 1, 7, C.dark);
+    d.rect(12, 21, 1, 7, C.porcelainDim);
+    d.rect(3, 21, 4, 7, C.porcelain); // the tank's own base beside it
+    d.rect(3, 21, 1, 7, C.dark);
+    d.rect(6, 21, 1, 7, C.porcelainDim);
+    d.rect(2, 28, 12, 1, C.dark);
+    d.rect(2, 29, 12, 1, C.underShadow);
+  }
+
+  emitRotation('TOILET', 'Toilet', { front: c, back, side }, 1, 2, {
+    category: 'misc',
+    backgroundTiles: 1,
+  });
 }
 
 // ── Washbasin ─────────────────────────────────────────────────
@@ -1140,6 +1288,59 @@ function counterShell(c) {
   c.rect(3, 22, 3, 1, C.coralDim);
   c.rect(2, 30, 12, 1, C.underShadow);
   emit('FRIDGE', 'Fridge', c, 1, 2, { category: 'storage', backgroundTiles: 1 });
+}
+
+// ── Smart fridge ──────────────────────────────────────────────
+// The one with a screen in the door. Named for what it is rather than after a
+// manufacturer: the sprite is a generic appliance and a brand name on it would
+// be a claim nobody needs.
+//
+// An on/off pair, unlike the plain FRIDGE. The reasoning that ruled it out
+// there does not apply here: lighting a normal fridge means opening its door,
+// which is a different silhouette, but a screen going dark is exactly what a
+// state change looks like.
+{
+  const build = (lit) => {
+    const c = new Canvas(16, 32);
+    // Darker body than the white FRIDGE, so the two are not the same sprite in
+    // two moods -- this one reads as stainless.
+    c.rect(1, 2, 14, 28, C.darker);
+    c.rect(2, 3, 12, 26, C.steel);
+    c.rect(12, 3, 2, 26, C.steelDim); // the rounded right-hand side
+    // French doors: a vertical seam rather than the freezer-over-fridge
+    // horizontal one, which is what distinguishes the shape at a glance.
+    c.rect(7, 3, 1, 26, C.darker);
+    c.rect(8, 3, 1, 26, C.steelLit);
+    c.rect(6, 8, 1, 8, C.graphite); // handles, one per door
+    c.rect(9, 8, 1, 8, C.graphite);
+
+    // The screen fills most of the left door. Bezel first, so it reads as a
+    // panel set INTO the door rather than a sticker on it.
+    c.rect(2, 5, 5, 13, C.darker);
+    if (lit) {
+      c.rect(3, 6, 3, 11, C.paleMint);
+      // A shopping list and a photo: the two things anybody actually puts on
+      // one of these. Coral for the accent row, as everywhere else.
+      c.rect(3, 6, 3, 2, C.coral);
+      for (const y of [9, 11, 13]) c.rect(3, y, 3, 1, C.mint);
+      c.rect(3, 15, 2, 2, C.mint);
+      c.set(5, 16, C.coralDim);
+    } else {
+      c.rect(3, 6, 3, 11, C.graphite);
+      c.rect(3, 6, 3, 1, C.graphiteLit); // one sheen row: off, not a hole
+    }
+    // Water and ice dispenser recessed into the right door, which is the other
+    // thing that says "this is the expensive one".
+    c.rect(10, 19, 3, 5, C.darker);
+    c.rect(11, 20, 1, 3, C.graphiteLit);
+    if (lit) c.set(12, 20, C.coral);
+    c.rect(2, 30, 12, 1, C.underShadow);
+    return c;
+  };
+  emitStates('SMART_FRIDGE', 'Smart Fridge', { off: build(false), on: build(true) }, 1, 2, {
+    category: 'electronics',
+    backgroundTiles: 1,
+  });
 }
 
 // ── Overhead cupboards ────────────────────────────────────────
