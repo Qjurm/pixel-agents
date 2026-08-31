@@ -254,7 +254,9 @@ export function phrasesFor(category: ActivityCategory): readonly string[] {
  * is also exactly how the team page names people.
  *
  * The roster comes from code14.nl/over-ons, which publishes 33 first names and
- * no job titles. So none of these mention what anybody DOES: the jokes are
+ * no job titles. Note that the page is not a live roster: two of those people
+ * have since left, and their phrases were removed by hand. Anyone refreshing
+ * this list from the site should check with the team rather than trusting it. So none of these mention what anybody DOES: the jokes are
  * about ordinary office moments, not about roles that would have had to be
  * guessed. Two Jelles and two Nielses are distinguished on that page but not
  * here -- in a joke, "Jelle" is friendlier than a disambiguated database
@@ -278,12 +280,11 @@ const HOUSE_PHRASES: readonly string[] = [
   'even bij Olcan langs',
   'Sil iets aanleren',
   'Jaimy op de hoogte houden',
-  'Linde om feedback vragen en hopen',
   'Jacob erbij halen voor de zekerheid',
   'Lodewijk laten meelezen',
   'Britt overtuigen met een schema',
-  'Collin een demo geven die net werkt',
   'Michael om een besluit vragen',
+  'Ruben ervan overtuigen dat het af is',
   'Marian ergens in meenemen',
   'Ineke om de sleutels vragen',
   'Harm-Jan lief aankijken',
