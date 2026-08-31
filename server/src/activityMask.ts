@@ -248,14 +248,18 @@ export function phrasesFor(category: ActivityCategory): readonly string[] {
  *
  * These name real colleagues, warmly and at their own request. Keep it that
  * way: this text shows up on everybody's screen, including theirs.
+ *
+ * First names only. A surname on a label two dozen pixels tall reads as a
+ * personnel file rather than as a room where people know each other -- and in
+ * an office this size the first name is already unambiguous.
  */
 const HOUSE_PHRASES: readonly string[] = [
   'Harm-Jan lief aankijken',
   'wachten tot Jelle knikt',
-  'Geerten Pas om hulp vragen',
-  'klagen bij Jordy ten Den',
-  'een gunst vragen aan Tune Mulderij',
-  'geld vragen aan Laura Klein Horstman',
+  'Geerten om hulp vragen',
+  'klagen bij Jordy',
+  'een gunst vragen aan Tune',
+  'geld vragen aan Laura',
   'het project bijwerken in RITA',
   'een ticket verstoppen in RITA',
   'de vrijdagmiddagborrel voorbereiden',
