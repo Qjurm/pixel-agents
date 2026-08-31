@@ -271,6 +271,13 @@ const HOUSE_PHRASES: readonly string[] = [
   'zeggen dat het in Laravel kan',
 ];
 
+/** The house phrases, for callers that need to know a label could legitimately
+ *  be one. Exposed because any masked status may be a house phrase, so a test
+ *  that only accepts its own category's list is wrong one time in four. */
+export function housePhrases(): readonly string[] {
+  return HOUSE_PHRASES;
+}
+
 /** How often a house phrase turns up instead of a generic one, as one-in-N.
  *  Four felt right: often enough to notice, rare enough to stay a joke. */
 const HOUSE_EVERY = 4;

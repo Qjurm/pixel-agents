@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { phrasesFor } from '../src/activityMask.js';
+import { housePhrases, phrasesFor } from '../src/activityMask.js';
 import { AgentStateStore } from '../src/agentStateStore.js';
 import { HookEventHandler } from '../src/hookEventHandler.js';
 import { claudeProvider } from '../src/providers/hook/claude/claude.js';
@@ -502,7 +502,7 @@ describe('HookEventHandler', () => {
     expect(toolMsg?.toolName).toBe('Read');
     // A reading tool gets one of the reading phrases -- which one depends on
     // the tool id, so this pins the category rather than the exact words.
-    expect(phrasesFor('reading')).toContain(toolMsg?.status);
+    expect([...phrasesFor('reading'), ...housePhrases()]).toContain(toolMsg?.status);
     expect(agent.currentHookToolId).toBeTruthy();
   });
 

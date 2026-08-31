@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ACTIVITY_CATEGORIES,
   categoriseTool,
+  housePhrases,
   isActivityCategory,
   maskedPhrase,
   phrasesFor,
@@ -101,8 +102,7 @@ describe('isActivityCategory', () => {
  * nothing to do with whether they are eyeing the Friday drinks.
  */
 describe('house phrases', () => {
-  const isHouse = (p: string) =>
-    !ACTIVITY_CATEGORIES.some((c) => (phrasesFor(c) as readonly string[]).includes(p));
+  const isHouse = (p: string) => (housePhrases() as readonly string[]).includes(p);
 
   it('turns up sometimes, but stays the minority', () => {
     const seeds = Array.from({ length: 400 }, (_, i) => `tool-${String(i)}`);

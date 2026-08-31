@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { phrasesFor } from '../src/activityMask.js';
+import { housePhrases, phrasesFor } from '../src/activityMask.js';
 import { AgentStateStore } from '../src/agentStateStore.js';
 import { PHRASE_ROTATE_INTERVAL_MS } from '../src/constants.js';
 import { startPhraseTicker } from '../src/phraseTicker.js';
@@ -67,7 +67,8 @@ describe('startPhraseTicker', () => {
     // Same tool, same id: only the words are allowed to move, or the character
     // would change animation every five seconds.
     expect(sent[0]!.toolName).toBe('Bash');
-    expect(phrasesFor('running')).toContain(sent[0]!.status);
+    // House phrases stand in for any category, so both lists are valid answers.
+    expect([...phrasesFor('running'), ...housePhrases()]).toContain(sent[0]!.status);
   });
 
   it('keeps changing the words as time passes', () => {
@@ -111,6 +112,8 @@ describe('startPhraseTicker', () => {
     vi.advanceTimersByTime(PHRASE_ROTATE_INTERVAL_MS);
 
     expect(agent.activeToolStatuses.get('t-1')).not.toBe('initial');
-    expect(phrasesFor('reading')).toContain(agent.activeToolStatuses.get('t-1'));
+    expect([...phrasesFor('reading'), ...housePhrases()]).toContain(
+      agent.activeToolStatuses.get('t-1'),
+    );
   });
 });
