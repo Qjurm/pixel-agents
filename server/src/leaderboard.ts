@@ -37,6 +37,18 @@ export function leaderboardPath(): string {
   return path.join(os.homedir(), SERVER_JSON_DIR, LEADERBOARD_FILE_NAME);
 }
 
+/** The key one person is counted under.
+ *
+ *  Case-folded, because the same person arrives under more than one spelling:
+ *  the host's own agents are labelled from the OS account name (lower case)
+ *  while a join uses whatever they typed after --as. That split "ruben" and
+ *  "Ruben" into two rows of the same human, which is the one thing a
+ *  scoreboard must not do. Only case is folded -- two genuinely different
+ *  labels are two different people as far as this can tell. */
+function key(user: string): string {
+  return user.trim().toLowerCase();
+}
+
 /**
  * The running scoreboard.
  *
@@ -47,6 +59,8 @@ export function leaderboardPath(): string {
  * seconds apart, not restarts.
  */
 export class Leaderboard {
+  /** Keyed by the folded name; the entry keeps the spelling first seen, so the
+   *  board shows a name the way its owner wrote it. */
   private totals = new Map<string, LeaderboardEntry>();
   private seenTurns = new Set<string>();
   private dirty = false;
@@ -59,16 +73,17 @@ export class Leaderboard {
    *  can avoid broadcasting a scoreboard that did not change. */
   record(user: string, turnId: string, tokens: number): boolean {
     if (!user || !turnId || !Number.isFinite(tokens) || tokens <= 0) return false;
+    const who = key(user);
     // Scope the id by user: two machines could in principle mint the same id,
     // and one person's repeat must not suppress another person's turn.
-    const key = `${user}:${turnId}`;
-    if (this.seenTurns.has(key)) return false;
-    this.seenTurns.add(key);
+    const turnKey = `${who}:${turnId}`;
+    if (this.seenTurns.has(turnKey)) return false;
+    this.seenTurns.add(turnKey);
 
-    const entry = this.totals.get(user) ?? { user, tokens: 0, turns: 0 };
+    const entry = this.totals.get(who) ?? { user: user.trim(), tokens: 0, turns: 0 };
     entry.tokens += Math.round(tokens);
     entry.turns += 1;
-    this.totals.set(user, entry);
+    this.totals.set(who, entry);
     this.dirty = true;
     return true;
   }
@@ -129,11 +144,22 @@ export class Leaderboard {
         Number.isFinite(entry.tokens) &&
         Number.isFinite(entry.turns)
       ) {
-        this.totals.set(entry.user, {
-          user: entry.user,
-          tokens: Math.max(0, Math.round(entry.tokens)),
-          turns: Math.max(0, Math.round(entry.turns)),
-        });
+        // Merge on load as well as on record: a file written before the fold
+        // existed can hold the same person twice, and dropping one of the rows
+        // would throw away their score.
+        const who = key(entry.user);
+        const existing = this.totals.get(who);
+        if (existing) {
+          existing.tokens += Math.max(0, Math.round(entry.tokens));
+          existing.turns += Math.max(0, Math.round(entry.turns));
+          this.dirty = true; // the merged shape differs from the file on disk
+        } else {
+          this.totals.set(who, {
+            user: entry.user.trim(),
+            tokens: Math.max(0, Math.round(entry.tokens)),
+            turns: Math.max(0, Math.round(entry.turns)),
+          });
+        }
       }
     }
   }

@@ -59,6 +59,54 @@ describe('Leaderboard', () => {
     expect(board.standings()).toEqual([]);
   });
 
+  it('counts one person once, however they spelled their name', () => {
+    // The host's own agents are labelled from the OS account name (lower case)
+    // while a join uses whatever was typed after --as. That put "ruben" and
+    // "Ruben" on the board as two people, which is the one thing a scoreboard
+    // must not do.
+    const board = new Leaderboard(file);
+    board.record('ruben', 't1', 100);
+    board.record('Ruben', 't2', 50);
+    board.record('  RUBEN  ', 't3', 25);
+
+    expect(board.standings()).toEqual([{ user: 'ruben', tokens: 175, turns: 3 }]);
+  });
+
+  it('keeps two genuinely different names apart', () => {
+    // Only case is folded. Guessing that "Ollie" and "olcanteke" are the same
+    // human is not this code's business.
+    const board = new Leaderboard(file);
+    board.record('Ollie', 't1', 100);
+    board.record('olcanteke', 't2', 100);
+    expect(board.standings()).toHaveLength(2);
+  });
+
+  it('merges a file written before names were folded', () => {
+    // Dropping one of the two rows would throw away that half of their score.
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        version: 1,
+        entries: [
+          { user: 'ruben', tokens: 297698, turns: 28 },
+          { user: 'Ruben', tokens: 32090, turns: 16 },
+          { user: 'svennijkamp', tokens: 19258, turns: 14 },
+        ],
+      }),
+    );
+    expect(new Leaderboard(file).standings()).toEqual([
+      { user: 'ruben', tokens: 329788, turns: 44 },
+      { user: 'svennijkamp', tokens: 19258, turns: 14 },
+    ]);
+  });
+
+  it('a repeat under a different capitalisation is still a repeat', () => {
+    const board = new Leaderboard(file);
+    expect(board.record('ruben', 'same-turn', 100)).toBe(true);
+    expect(board.record('RUBEN', 'same-turn', 100)).toBe(false);
+    expect(board.standings()[0]!.turns).toBe(1);
+  });
+
   it('survives a restart', () => {
     // A scoreboard that resets whenever the office restarts is not a
     // scoreboard.
