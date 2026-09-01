@@ -3,30 +3,65 @@
   "name": "White Desk with MacBook",
   "category": "desks",
   "type": "group",
-  "groupType": "state",
+  "groupType": "rotation",
+  "rotationScheme": "2-way",
   "canPlaceOnWalls": false,
   "canPlaceOnSurfaces": false,
   "backgroundTiles": 1,
   "members": [
     {
-      "type": "asset",
-      "id": "WHITE_DESK_MACBOOK_OFF",
-      "file": "WHITE_DESK_MACBOOK_OFF.png",
-      "width": 48,
-      "height": 32,
-      "footprintW": 3,
-      "footprintH": 2,
-      "state": "off"
+      "type": "group",
+      "groupType": "state",
+      "orientation": "front",
+      "members": [
+        {
+          "type": "asset",
+          "id": "WHITE_DESK_MACBOOK_OFF",
+          "file": "WHITE_DESK_MACBOOK_OFF.png",
+          "width": 48,
+          "height": 32,
+          "footprintW": 3,
+          "footprintH": 2,
+          "state": "off"
+        },
+        {
+          "type": "asset",
+          "id": "WHITE_DESK_MACBOOK_ON",
+          "file": "WHITE_DESK_MACBOOK_ON.png",
+          "width": 48,
+          "height": 32,
+          "footprintW": 3,
+          "footprintH": 2,
+          "state": "on"
+        }
+      ]
     },
     {
-      "type": "asset",
-      "id": "WHITE_DESK_MACBOOK_ON",
-      "file": "WHITE_DESK_MACBOOK_ON.png",
-      "width": 48,
-      "height": 32,
-      "footprintW": 3,
-      "footprintH": 2,
-      "state": "on"
+      "type": "group",
+      "groupType": "state",
+      "orientation": "side",
+      "members": [
+        {
+          "type": "asset",
+          "id": "WHITE_DESK_MACBOOK_SIDE_OFF",
+          "file": "WHITE_DESK_MACBOOK_SIDE_OFF.png",
+          "width": 16,
+          "height": 64,
+          "footprintW": 1,
+          "footprintH": 4,
+          "state": "off"
+        },
+        {
+          "type": "asset",
+          "id": "WHITE_DESK_MACBOOK_SIDE_ON",
+          "file": "WHITE_DESK_MACBOOK_SIDE_ON.png",
+          "width": 16,
+          "height": 64,
+          "footprintW": 1,
+          "footprintH": 4,
+          "state": "on"
+        }
+      ]
     }
   ]
 }

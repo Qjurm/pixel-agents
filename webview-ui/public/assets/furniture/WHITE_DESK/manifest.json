@@ -2,12 +2,32 @@
   "id": "WHITE_DESK",
   "name": "White Desk",
   "category": "desks",
-  "type": "asset",
+  "type": "group",
+  "groupType": "rotation",
+  "rotationScheme": "2-way",
   "canPlaceOnWalls": false,
   "canPlaceOnSurfaces": false,
   "backgroundTiles": 1,
-  "width": 48,
-  "height": 32,
-  "footprintW": 3,
-  "footprintH": 2
+  "members": [
+    {
+      "type": "asset",
+      "id": "WHITE_DESK",
+      "file": "WHITE_DESK.png",
+      "width": 48,
+      "height": 32,
+      "footprintW": 3,
+      "footprintH": 2,
+      "orientation": "front"
+    },
+    {
+      "type": "asset",
+      "id": "WHITE_DESK_SIDE",
+      "file": "WHITE_DESK_SIDE.png",
+      "width": 16,
+      "height": 64,
+      "footprintW": 1,
+      "footprintH": 4,
+      "orientation": "side"
+    }
+  ]
 }

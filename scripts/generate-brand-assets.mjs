@@ -796,6 +796,36 @@ function drawDeskLaptop(c, x, lit, deck = 11) {
   c.rect(x + 5, deck + 1, 4, 1, C.steelDim); // trackpad
 }
 
+/**
+ * The same laptop turned a quarter turn, for a desk seen side-on.
+ *
+ * Shaped after the bundled PC_SIDE, which is the office's own answer to this
+ * problem: it turns the CRT into a narrow deep box and the keyboard into a thin
+ * sliver beside it. So the lid becomes a slab standing edge-on and the deck a
+ * two-row bar, and all that survives of the screen is the one column of pixels
+ * along its facing edge -- which is genuinely all you would see.
+ *
+ * Faces LEFT, matching PC_SIDE's keyboard: the sprite cannot know which side
+ * its occupant sits on, so the two side-on machines at least agree with each
+ * other rather than pointing opposite ways on neighbouring desks.
+ */
+function drawDeskLaptopSide(c, x, lit, deck) {
+  // Deck, edge-on: the keys collapse into a single dim row along the top.
+  c.rect(x, deck, 10, 2, C.steel);
+  c.rect(x + 1, deck, 7, 1, C.steelDim);
+  c.rect(x, deck + 2, 10, 1, C.steelLit); // front lip catching the light
+  // Lid: a thin slab at the hinge end, its top edge offset by a pixel so it
+  // leans back instead of standing to attention.
+  c.rect(x + 9, deck - 9, 4, 10, C.graphite);
+  c.rect(x + 10, deck - 10, 3, 1, C.graphite);
+  // Two columns of screen, not the one a real side view would show. The office
+  // swaps this sprite for its lit twin to say "somebody is working here", and a
+  // single pixel of difference does not carry that across the room.
+  c.rect(x + 9, deck - 8, 2, 7, lit ? C.paleMint : C.darker);
+  if (lit) c.rect(x + 4, deck, 5, 1, C.paleMint); // screen glow on the keys
+  c.rect(x + 8, deck - 1, 1, 1, C.steelDim); // hinge
+}
+
 // ── A desk with a MacBook on it: somewhere to actually sit ───
 // A workstation in one piece. The desk is the project's own DESK_FRONT,
 // composited rather than redrawn, so the plane and silhouette match the desks
@@ -846,6 +876,10 @@ function drawDeskLaptop(c, x, lit, deck = 11) {
    *  and one row higher clips its lid off the top of the sprite. */
   const FRAME_TOP = 24;
 
+  /** The side view's slab ends this far above the sprite bottom, leaving room
+   *  for the same frame-then-foot stack the front view has. */
+  const SIDE_FRAME_TOP = 56;
+
   const drawWhiteDesk = (c) => {
     // A deep worktop. This is the surface you are meant to notice: a desk seen
     // from above is mostly tabletop, and the earlier thin band read as a shelf
@@ -868,36 +902,145 @@ function drawDeskLaptop(c, x, lit, deck = 11) {
     }
   };
 
-  {
-    const c = new Canvas(48, 32);
-    drawWhiteDesk(c);
-    emit('WHITE_DESK', 'White Desk', c, 3, 2, {
-      category: 'desks',
-      canPlaceOnWalls: false,
-      canPlaceOnSurfaces: false,
-      backgroundTiles: 1,
-    });
-  }
+  /**
+   * The same desk turned a quarter turn: one tile wide, four deep, its long
+   * edge running away from the camera. Shaped after the bundled DESK_SIDE,
+   * which is what makes a white desk and a wooden one line up when they stand
+   * in the same row.
+   *
+   * The plane stays at DECK. That is the whole point of keeping it: a laptop,
+   * a monitor and a mug are all drawn to that height, so a desk that moved its
+   * surface when you rotated it would drop everything standing on it.
+   */
+  const drawWhiteDeskSide = (c) => {
+    c.rect(1, DECK, 14, 1, C.whiteLit);
+    c.rect(1, DECK + 1, 14, SIDE_FRAME_TOP - DECK - 3, C.white);
+    c.rect(1, SIDE_FRAME_TOP - 2, 14, 1, C.whiteEdge); // near lip
+    c.rect(2, SIDE_FRAME_TOP - 1, 12, 1, C.whiteShadow);
+    // Both long edges, or the slab is a white bar with no thickness. The front
+    // view gets that read for free from its lip and its two legs; turned side
+    // on there is nothing else in the silhouette to give it a top and a side.
+    for (const x of [1, 14]) c.rect(x, DECK + 1, 1, SIDE_FRAME_TOP - DECK - 3, C.whiteEdge);
 
-  // The same desk with a laptop on it, so one piece is a whole workstation.
-  const build = (lit) => {
+    // One post, not two. The far leg sits under the top of the slab and would
+    // be hidden by it, so drawing it only muddies the silhouette.
+    c.rect(6, SIDE_FRAME_TOP, 4, 61 - SIDE_FRAME_TOP, C.white);
+    c.rect(9, SIDE_FRAME_TOP, 1, 61 - SIDE_FRAME_TOP, C.whiteEdge);
+    c.rect(3, 61, 10, 2, C.white);
+    c.rect(3, 63, 10, 1, C.whiteShadow);
+  };
+
+  /**
+   * Emit a desk as a rotation group, optionally with an on/off pair per
+   * orientation.
+   *
+   * Bespoke rather than another argument on emitStates, because this is the
+   * one shape neither helper covers: a rotation group whose members are
+   * themselves state groups. The bundled PC is built exactly this way, so the
+   * catalog already knows how to read it -- rotation collects the "off"
+   * variants, and the on/off pairing keys on groupId PLUS orientation, which
+   * is why the orientation has to sit on the inner group rather than on each
+   * asset.
+   *
+   * The front member keeps the plain id. Renaming it to WHITE_DESK_FRONT would
+   * be tidier and would silently delete every white desk in a saved layout:
+   * unknown types are skipped, not reported.
+   */
+  const emitDeskRotation = (id, name, orientations) => {
+    const dir = join(FURNITURE, id);
+    mkdirSync(dir, { recursive: true });
+    const members = orientations.map(({ orientation, assetId, canvases }) => {
+      const asset = (state, canvas) => {
+        const memberId = state ? `${assetId}_${state.toUpperCase()}` : assetId;
+        writeFileSync(join(dir, `${memberId}.png`), canvas.toPng());
+        return {
+          type: 'asset',
+          id: memberId,
+          file: `${memberId}.png`,
+          width: canvas.w,
+          height: canvas.h,
+          footprintW: canvas.w / 16,
+          footprintH: canvas.h / 16,
+          ...(state ? { state } : {}),
+        };
+      };
+      if (canvases.plain) {
+        return { ...asset(null, canvases.plain), orientation };
+      }
+      return {
+        type: 'group',
+        groupType: 'state',
+        orientation,
+        members: Object.entries(canvases).map(([state, canvas]) => asset(state, canvas)),
+      };
+    });
+    writeFileSync(
+      join(dir, 'manifest.json'),
+      `${JSON.stringify(
+        {
+          id,
+          name,
+          category: 'desks',
+          type: 'group',
+          groupType: 'rotation',
+          rotationScheme: '2-way',
+          canPlaceOnWalls: false,
+          canPlaceOnSurfaces: false,
+          backgroundTiles: 1,
+          members,
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    console.log(`  ✓ ${id}  ${members.length} orientations`);
+  };
+
+  const front = () => {
     const c = new Canvas(48, 32);
     drawWhiteDesk(c);
-    drawDeskLaptop(c, 17, lit, DECK);
     return c;
   };
-  emitStates(
-    'WHITE_DESK_MACBOOK',
-    'White Desk with MacBook',
-    { off: build(false), on: build(true) },
-    3,
-    2,
+  const side = () => {
+    const c = new Canvas(16, 64);
+    drawWhiteDeskSide(c);
+    return c;
+  };
+
+  emitDeskRotation('WHITE_DESK', 'White Desk', [
+    { orientation: 'front', assetId: 'WHITE_DESK', canvases: { plain: front() } },
+    { orientation: 'side', assetId: 'WHITE_DESK_SIDE', canvases: { plain: side() } },
+  ]);
+
+  // The same desk with a laptop on it, so one piece is a whole workstation.
+  //
+  // LAPTOP_INSET puts the machine in the middle of the worktop rather than
+  // against its back edge. Drawn at DECK it stood on the very first row of the
+  // surface, which at a glance read as floating just behind the desk.
+  const LAPTOP_INSET = 4;
+  const frontWithLaptop = (lit) => {
+    const c = front();
+    drawDeskLaptop(c, 17, lit, DECK + LAPTOP_INSET);
+    return c;
+  };
+  const sideWithLaptop = (lit) => {
+    const c = side();
+    drawDeskLaptopSide(c, 2, lit, DECK + 24);
+    return c;
+  };
+
+  emitDeskRotation('WHITE_DESK_MACBOOK', 'White Desk with MacBook', [
     {
-      category: 'desks',
-      canPlaceOnSurfaces: false,
-      backgroundTiles: 1,
+      orientation: 'front',
+      assetId: 'WHITE_DESK_MACBOOK',
+      canvases: { off: frontWithLaptop(false), on: frontWithLaptop(true) },
     },
-  );
+    {
+      orientation: 'side',
+      assetId: 'WHITE_DESK_MACBOOK_SIDE',
+      canvases: { off: sideWithLaptop(false), on: sideWithLaptop(true) },
+    },
+  ]);
 }
 
 // A closed MacBook was tried here and dropped. At 16px a shut laptop is a grey
@@ -905,25 +1048,44 @@ function drawDeskLaptop(c, x, lit, deck = 11) {
 // finger notch, the taper -- lands on the same one or two rows, and the result
 // read as a radiator vent. There is no version of it worth a palette slot.
 
+/**
+ * Where a thing standing on a desk puts its feet.
+ *
+ * Not a free choice: the renderer draws a surface item's sprite at the same
+ * tile origin as the desk's, so the two sprites are simply stacked and the
+ * item's lowest row lands wherever it happens to fall on the desktop. The
+ * bundled PC fills rows 0..22 of a 32-row sprite with its base here, in the
+ * middle of the desktop, and both desks in this office were drawn to that
+ * plane. Anything that ignores it stands somewhere else entirely -- the
+ * monitors first shipped with their feet on row 22 and read as standing on the
+ * FRONT EDGE of the desk, screen covering the whole worktop.
+ *
+ * The consequence is a hard ceiling: base row 17 leaves eighteen rows for the
+ * whole machine, which is why the panels below are shorter than a monitor
+ * drawn on its own would be. A taller screen has nowhere to go but off the top
+ * of the sprite.
+ */
+const SURFACE_BASE = 17;
+
 // ── A modern widescreen monitor ──────────────────────────────
 {
   const build = (lit) => {
     const c = new Canvas(32, 32);
-    // 30x17 outer, which is 16:9 to within a pixel, against the CRT's near
-    // square face -- the aspect ratio is what sells "modern" at this size.
-    c.rect(1, 0, 30, 17, C.graphite);
+    // 24x14 outer against the CRT's near-square face -- the aspect ratio is
+    // what sells "modern" at this size, and 24 wide keeps the panel inside the
+    // two-tile footprint with a margin either side.
+    c.rect(4, 0, 24, 14, C.graphite);
     if (lit) {
-      codeLines(c, 2, 1, 29, 13);
+      codeLines(c, 5, 1, 26, 10);
     } else {
-      c.rect(2, 1, 28, 13, C.darker);
-      c.rect(2, 1, 28, 1, C.steelDim);
+      c.rect(5, 1, 22, 10, C.darker);
+      c.rect(5, 1, 22, 1, C.steelDim);
     }
     // A chin two pixels deep, so the thin side bezels read as deliberate.
-    c.rect(1, 14, 30, 3, C.graphite);
-    c.rect(15, 15, 2, 1, C.steelDim);
-    c.rect(14, 17, 4, 4, C.steel); // neck
-    c.rect(8, 21, 16, 2, C.steelDim); // blade foot
-    c.rect(8, 21, 16, 1, C.steel);
+    c.rect(15, 12, 2, 1, C.steelDim);
+    c.rect(14, 14, 4, 2, C.steel); // neck
+    c.rect(9, SURFACE_BASE - 1, 14, 1, C.steel); // blade foot
+    c.rect(9, SURFACE_BASE, 14, 1, C.steelDim);
     return c;
   };
   emitStates('MONITOR', 'Widescreen Monitor', { off: build(false), on: build(true) }, 2, 2);
@@ -933,22 +1095,21 @@ function drawDeskLaptop(c, x, lit, deck = 11) {
 {
   const build = (lit) => {
     const c = new Canvas(48, 32);
-    c.rect(1, 2, 46, 15, C.graphite);
+    c.rect(1, 0, 46, 14, C.graphite);
     if (lit) {
-      codeLines(c, 2, 3, 45, 12);
+      codeLines(c, 2, 1, 45, 10);
       // A seam down the middle: an ultrawide is only worth having as a separate
       // piece if it is visibly split into two working halves.
-      c.rect(23, 3, 1, 10, C.graphite);
-      c.rect(24, 3, 1, 10, C.dark);
+      c.rect(23, 1, 1, 10, C.graphite);
+      c.rect(24, 1, 1, 10, C.dark);
     } else {
-      c.rect(2, 3, 44, 10, C.darker);
-      c.rect(2, 3, 44, 1, C.steelDim);
+      c.rect(2, 1, 44, 10, C.darker);
+      c.rect(2, 1, 44, 1, C.steelDim);
     }
-    c.rect(1, 13, 46, 4, C.graphite);
-    c.rect(23, 14, 2, 1, C.steelDim);
-    c.rect(22, 17, 4, 4, C.steel);
-    c.rect(14, 21, 20, 2, C.steelDim);
-    c.rect(14, 21, 20, 1, C.steel);
+    c.rect(23, 12, 2, 1, C.steelDim);
+    c.rect(22, 14, 4, 2, C.steel);
+    c.rect(14, SURFACE_BASE - 1, 20, 1, C.steel);
+    c.rect(14, SURFACE_BASE, 20, 1, C.steelDim);
     return c;
   };
   emitStates('ULTRAWIDE', 'Ultrawide Monitor', { off: build(false), on: build(true) }, 3, 2);
