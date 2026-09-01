@@ -100,7 +100,7 @@ export function joinPageHtml(officeUrl: string, teamToken: string): string {
     <ul>
       <li>Node is required; the hook Claude runs is a Node script.</li>
       <li>Anyone who can open this page can join, so keep it on your own network.</li>
-      <li>Leave any time: <code>node join.js --leave</code> or delete <code>~/.pixel-agents/team.json</code>.</li>
+      <li>Leave any time: the same command with <code>--leave</code> on the end.</li>
     </ul>
   </div>
 

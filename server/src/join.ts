@@ -12,7 +12,12 @@
  * assets. A joiner never hosts anything, and a bundle that pulled the server in
  * would need dependencies that a bare machine does not have.
  *
- *   node join.js http://10.0.0.5:3100/?token=<team-token> [--as name] [--yes]
+ *   node join.js <office-url> [--as name] [--yes]     join
+ *   node join.js <office-url> --leave [--yes]          leave again
+ *
+ * Leaving matters as much as joining: somebody who arrived through
+ * `curl ... | sh` has no CLI to undo it with, so without this their only exit
+ * was editing files in their home directory by hand.
  *
  * No shebang in this file on purpose: esbuild adds one as a banner, and two
  * would make line 2 of the bundle a syntax error.
@@ -87,6 +92,68 @@ function askYesNo(question: string): Promise<boolean> {
   });
 }
 
+/**
+ * Undo a join.
+ *
+ * Membership goes first and unconditionally: that is the one thing that stops
+ * this machine reporting anywhere, and it must not depend on the answer to any
+ * question.
+ *
+ * The hooks are a separate decision, and only raised when NOTHING is left to
+ * report to. Someone who is in two offices, or who runs an office of their own,
+ * still needs them -- removing them because they left one room would break the
+ * others silently.
+ */
+async function leaveOffice(server: TeamServer, assumeYes: boolean): Promise<void> {
+  const before = readTeamServers();
+  const remaining = before.filter((entry) => !sameAddress(entry, server));
+
+  if (remaining.length === before.length) {
+    console.log(`[Pixel Agents] Not a member of ${server.host}:${server.port} — nothing to leave.`);
+  } else {
+    writeTeamServers(remaining);
+    console.log(`[Pixel Agents] Left the office at ${server.host}:${server.port}.`);
+    console.log('[Pixel Agents] Your agents stop appearing there immediately.');
+  }
+
+  if (remaining.length > 0) {
+    console.log(
+      `[Pixel Agents] Still reporting to ${String(remaining.length)} other office(s), so the` +
+        '\n               Claude hooks are left in place.',
+    );
+    return;
+  }
+
+  if (!(await claudeProvider.areHooksInstalled())) return;
+
+  // Local offices are a reason to keep the hooks too, and this machine may be
+  // running one -- but a joiner has no way to ask a server that is not there.
+  // So the question is asked rather than assumed either way.
+  if (!assumeYes) {
+    console.log(
+      '\n  You are not in any shared office any more. The Claude hooks are still' +
+        '\n  installed in ~/.claude/settings.json. Remove them too?' +
+        '\n  (Keep them if you also run a Pixel Agents office on this machine.)\n',
+    );
+    if (!(await askYesNo('  Remove the Claude hooks? [y/N] '))) {
+      console.log('[Pixel Agents] Hooks left as they are.');
+      return;
+    }
+  }
+
+  try {
+    await claudeProvider.uninstallHooks();
+    // Persisted only AFTER the uninstall succeeded: flipping it first strands
+    // the user with entries that still fire and a preference that says off.
+    setHooksEnabled(claudeProvider.id, false);
+    console.log('[Pixel Agents] Claude hooks removed.');
+  } catch (err) {
+    console.error(
+      `[Pixel Agents] Could not remove the hooks: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const url = argv.find((a) => !a.startsWith('-'));
@@ -97,9 +164,10 @@ async function main(): Promise<void> {
     process.env['USERNAME'] ??
     'someone';
   const assumeYes = argv.includes('--yes') || argv.includes('-y');
+  const leaving = argv.includes('--leave');
 
   if (!url) {
-    console.error('Usage: node join.js <office-url-with-token> [--as name] [--yes]');
+    console.error('Usage: node join.js <office-url> [--as name] [--yes] [--leave]');
     process.exit(1);
   }
 
@@ -109,6 +177,11 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   const server = parsed.server;
+
+  if (leaving) {
+    await leaveOffice(server, assumeYes);
+    return;
+  }
 
   if (isOwnOffice(server, localServerPorts())) {
     console.error(
